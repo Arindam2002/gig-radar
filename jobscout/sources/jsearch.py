@@ -1,4 +1,4 @@
-"""JSearch (RapidAPI, Google for Jobs) — free tier ~200 req/mo.
+"""JSearch (RapidAPI, Google for Jobs) - free tier ~200 req/mo.
 
 Capped at 1 call per query per run to stay inside the free tier.
 Off until a key is configured.
@@ -13,7 +13,7 @@ API = "https://jsearch.p.rapidapi.com/search"
 def fetch(cfg: dict) -> list[Job]:
     key = cfg.get("keys", {}).get("jsearch_rapidapi_key")
     if not key:
-        print("  [jsearch] no key configured — skipping")
+        print("  [jsearch] no key configured - skipping")
         return []
     headers = {"X-RapidAPI-Key": key, "X-RapidAPI-Host": "jsearch.p.rapidapi.com"}
     jobs: list[Job] = []

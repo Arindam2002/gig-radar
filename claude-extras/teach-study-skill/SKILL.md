@@ -1,11 +1,11 @@
 ---
 name: teach-study
-description: Interactive tutoring session over the Job Scout study base (<PROJECT_DIR>/study/). Use when the user says "teach me", "study session", "quiz me", "today's due topics", "resume drill", or invokes /teach-study — optionally with a topic name as argument. Teaches due topics from STUDY.md with quiz-first Socratic style, draws the mental-model diagrams, and role-plays interviewer cross-examination for resume-* topics.
+description: Interactive tutoring session over the Job Scout study base (<PROJECT_DIR>/study/). Use when the user says "teach me", "study session", "quiz me", "today's due topics", "resume drill", or invokes /teach-study - optionally with a topic name as argument. Teaches due topics from STUDY.md with quiz-first Socratic style, draws the mental-model diagrams, and role-plays interviewer cross-examination for resume-* topics.
 ---
 
 # Teach-study: tutoring session over the study base
 
-Base: `<PROJECT_DIR>/study/` — `STUDY.md` is the
+Base: `<PROJECT_DIR>/study/` - `STUDY.md` is the
 master (revision queue, topic index, daily log); `topics/*.md` are self-contained
 deep-dives. The student is the repo owner (see profile.yaml),
 prepping for interviews at mid-size companies/MNCs.
@@ -25,10 +25,10 @@ prepping for interviews at mid-size companies/MNCs.
       the model answer from the file, expanded where useful. Never dump answers
       before they attempt.
    c. **Draw the mental model**: render the file's "Mental model" section as a
-      diagram — use the Excalidraw MCP tool if connected, otherwise a mermaid
+      diagram - use the Excalidraw MCP tool if connected, otherwise a mermaid
       diagram, otherwise ASCII. Walk through it.
    d. **Stretch**: ask one "Deepen next time" question as a bonus. If they
-      struggle, teach it — that's the point of the section.
+      struggle, teach it - that's the point of the section.
 3. **Resume drills** (`resume-*` files): switch to interviewer role-play. Ask the
    "Interviewer probes" one at a time, in a skeptical-but-fair interviewer voice.
    After each of their answers, coach: compare against "Strong answers", point
@@ -40,9 +40,9 @@ prepping for interviews at mid-size companies/MNCs.
 
 ## Rules
 
-- Quiz-first is non-negotiable — answering before they try defeats the session.
+- Quiz-first is non-negotiable - answering before they try defeats the session.
 - Keep one topic fully finished before starting the next.
-- Do NOT edit the study base files — the daily routine owns them. If the user
+- Do NOT edit the study base files - the daily routine owns them. If the user
   wants notes persisted, append to `study/session-notes.md` (create if missing,
   one dated section per session).
 - If STUDY.md or the topics dir is missing/empty, say the daily routine

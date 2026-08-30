@@ -128,7 +128,7 @@ def connect(db_path: Path | str | None = None) -> sqlite3.Connection:
 
 
 def init_db(db_path: Path | str | None = None) -> sqlite3.Connection:
-    """Create/migrate schema. Called by run.py and test setup — not per-connect."""
+    """Create/migrate schema. Called by run.py and test setup - not per-connect."""
     conn = connect(db_path)
     conn.executescript(SCHEMA)
     _migrate(conn)
@@ -316,7 +316,7 @@ def set_status(conn: sqlite3.Connection, jid: str, status: str, table: str = "jo
     now = now_iso()
     conn.execute(f"UPDATE {table} SET status=?, status_updated_at=? WHERE id=?",
                  (status, now, jid))
-    # history feeds the activity calendar — current status alone loses dates
+    # history feeds the activity calendar - current status alone loses dates
     conn.execute("INSERT INTO status_events (kind, ref_id, status, at) VALUES (?,?,?,?)",
                  ("job" if table == "jobs" else "company", jid, status, now))
     conn.commit()
@@ -343,7 +343,7 @@ def mark_seen(conn: sqlite3.Connection, jid: str):
 def archive_backlog(conn: sqlite3.Connection, *, junk_score: float = 20,
                     low_score: float = 40, low_days: int = 5,
                     posted_days: int = 10, unseen_days: int = 7) -> int:
-    """Keep the 'new' pool honest. Archives (never deletes — deletion would
+    """Keep the 'new' pool honest. Archives (never deletes - deletion would
     let the same listing re-enter as new on the next fetch):
       - junk:    score < junk_score (will never surface)
       - stale-low: score < low_score and posted > low_days ago

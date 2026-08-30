@@ -1,4 +1,4 @@
-"""Remotive — the public feed is a fixed ~20-job sample that ignores all query
+"""Remotive - the public feed is a fixed ~20-job sample that ignores all query
 params (verified). One request per run, near-zero expectations, near-zero cost.
 """
 from bs4 import BeautifulSoup

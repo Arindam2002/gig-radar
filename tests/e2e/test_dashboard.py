@@ -96,7 +96,7 @@ def test_topic_link_opens_focus_panel(page, server):
 
 
 def test_brief_actions_apply_from_today_page(page, server):
-    """Brief picks carry inline status actions — mark applied without hunting
+    """Brief picks carry inline status actions - mark applied without hunting
     the job down in Fresh matches."""
     goto_page(page, server, "/")
     # DB-matched pick has action buttons; unknown external link has none

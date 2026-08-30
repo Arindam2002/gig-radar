@@ -1,4 +1,4 @@
-"""Adzuna India — free API (1000 calls/mo). Off until keys are configured."""
+"""Adzuna India - free API (1000 calls/mo). Off until keys are configured."""
 from ..models import Job
 from ..normalize import to_epoch, to_iso_utc
 from .base import get
@@ -10,7 +10,7 @@ def fetch(cfg: dict) -> list[Job]:
     keys = cfg.get("keys", {})
     app_id, app_key = keys.get("adzuna_app_id"), keys.get("adzuna_app_key")
     if not (app_id and app_key):
-        print("  [adzuna] no keys configured — skipping")
+        print("  [adzuna] no keys configured - skipping")
         return []
     jobs: list[Job] = []
     for query in cfg["search"]["queries"]:

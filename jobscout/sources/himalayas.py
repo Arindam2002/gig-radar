@@ -1,4 +1,4 @@
-"""Himalayas — cursor-paginated free API. Newest-first freshness feed.
+"""Himalayas - cursor-paginated free API. Newest-first freshness feed.
 
 Corpus is ~100K jobs at a hard 20/page; we take a few pages of the newest and
 gate hard on India eligibility (probe found 0/20 India-eligible in a sample).

@@ -1,4 +1,4 @@
-"""Gemini structured extraction (optional — needs keys.gemini_api_key).
+"""Gemini structured extraction (optional - needs keys.gemini_api_key).
 
 Used to pull structured facts out of JD text that regex can't reach:
 experience requirement, salary, seniority, India eligibility. JSON mode with a
@@ -85,7 +85,7 @@ def _parse_429(r) -> tuple[float, str]:
 def extract_job_facts(title: str, description: str, api_key: str,
                       model: str = DEFAULT_MODEL) -> dict:
     """Structured facts from a JD. Raises on API failure; caller decides fallback."""
-    prompt = f"""Extract facts from this job posting. Use null for anything not stated —
+    prompt = f"""Extract facts from this job posting. Use null for anything not stated -
 do not guess salary or experience numbers that are not in the text.
 
 Title: {title}

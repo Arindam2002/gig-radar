@@ -10,7 +10,7 @@ import pytest
 
 if not (ROOT / "profile.yaml").exists():
     pytest.skip("these tests assert against the repo owner's filled profile.yaml "
-                "(gitignored) — copy profile.example.yaml and tune expectations "
+                "(gitignored) - copy profile.example.yaml and tune expectations "
                 "to your own profile", allow_module_level=True)
 
 

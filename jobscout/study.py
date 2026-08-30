@@ -1,8 +1,8 @@
 """Study planner: turn the jobs DB into a curriculum.
 
 Constraints (user decisions 2026-08-25):
-- Demand statistics come from GOOD companies only — enterprise/growth tier
-  (unknown allowed, staffing/startup excluded) — so prep tracks what mid-size
+- Demand statistics come from GOOD companies only - enterprise/growth tier
+  (unknown allowed, staffing/startup excluded) - so prep tracks what mid-size
   companies and MNCs actually ask, not early-startup stacks.
 - Two equal tracks: backend/.NET/system-design AND AI-infra. Prep is
   GENERIC (transferable interview skills), never tied to specific companies.
@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 from .score import _pattern
 
-# concepts the market asks for beyond his current profile — tracked so gaps
+# concepts the market asks for beyond his current profile - tracked so gaps
 # in widely-demanded skills surface even when he has zero overlap today
 MARKET_CONCEPTS = {
     "system design": ["system design", "distributed systems", "scalability",
@@ -105,7 +105,7 @@ def gap_report_md(conn, profile: dict, min_score: float = 50) -> str:
     demand = skill_demand(conn, profile, min_score)
     n_jobs = len(good_company_jobs(conn, min_score))
     if not demand:
-        return "_Not enough good-company JDs collected yet — run a few refreshes first._"
+        return "_Not enough good-company JDs collected yet - run a few refreshes first._"
     lines = [
         f"_Based on {n_jobs} high-scoring JDs at enterprise/growth companies "
         f"(staffing & early-startup JDs excluded)._",
@@ -119,27 +119,27 @@ def gap_report_md(conn, profile: dict, min_score: float = 50) -> str:
         elif d["have"] == "transferable" and d["pct"] >= 30:
             prio = "🟡 deepen"
         elif d["have"] == "core":
-            prio = "🟢 strong — keep sharp"
+            prio = "🟢 strong - keep sharp"
         else:
-            prio = "—"
+            prio = "-"
         lines.append(f"| {name} | {d['pct']}% of JDs | {d['have']} | {prio} |")
     gaps = [n for n, d in demand.items() if d["have"] == "missing" and d["pct"] >= 15]
     if gaps:
-        lines += ["", f"**This week's study focus:** {', '.join(gaps[:3])} — "
+        lines += ["", f"**This week's study focus:** {', '.join(gaps[:3])} - "
                   "highest demand at your target companies with no profile coverage."]
     return "\n".join(lines)
 
 
 PREP_PROMPT = """You are a senior interview coach preparing a candidate for backend
 and AI-infrastructure roles at MID-SIZE PRODUCT COMPANIES and MNCs (think Razorpay,
-Atlassian, Microsoft, NVIDIA tier) — NOT early-stage startups. 2 years experience,
+Atlassian, Microsoft, NVIDIA tier) - NOT early-stage startups. 2 years experience,
 targeting SDE-2 level. Their stack: C#/.NET AND Python; differentiator: self-hosted
 LLM inference infrastructure.
 
 Today's demanded skills at their target companies (from real job descriptions):
 {demand_summary}
 
-Generate today's prep drop ({date}). Keep it GENERIC and transferable — classic
+Generate today's prep drop ({date}). Keep it GENERIC and transferable - classic
 interview material of the kind large/mid-size companies actually ask. No company
 names. Format as markdown:
 

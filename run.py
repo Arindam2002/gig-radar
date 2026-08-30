@@ -101,7 +101,7 @@ def enrich_linkedin(conn, profile, cfg):
     for row in rows:
         detail = linkedin_guest.enrich(row["url"])
         if detail.get("error"):
-            print(f"  [linkedin stage-2] {row['url'][:60]}: {detail['error']} — stopping stage 2")
+            print(f"  [linkedin stage-2] {row['url'][:60]}: {detail['error']} - stopping stage 2")
             break
         desc = detail.get("description", "")
         if not desc:
@@ -161,7 +161,7 @@ def llm_enrich(conn, cfg):
         try:
             f = extract_job_facts(row["title"], row["description"], key, model)
         except RateLimited as e:
-            print(f"  [llm] {e} — exhausted quota: {e.quota_info}")
+            print(f"  [llm] {e} - exhausted quota: {e.quota_info}")
             if retried or e.retry_seconds > 120:
                 print("  [llm] stopping pass; remaining JDs picked up next run")
                 break
@@ -170,10 +170,10 @@ def llm_enrich(conn, cfg):
             try:
                 f = extract_job_facts(row["title"], row["description"], key, model)
             except Exception:
-                print("  [llm] still limited — stopping pass")
+                print("  [llm] still limited - stopping pass")
                 break
         except Exception as e:
-            print(f"  [llm] {row['title'][:40]!r} failed: {str(e)[:100]} — stopping pass")
+            print(f"  [llm] {row['title'][:40]!r} failed: {str(e)[:100]} - stopping pass")
             break
         sal_min = sal_max = None
         cur = ""

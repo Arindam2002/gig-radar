@@ -1,4 +1,4 @@
-"""LinkedIn public logged-out ("guest") endpoints — the India backbone.
+"""LinkedIn public logged-out ("guest") endpoints - the India backbone.
 
 Two stages:
   1. fetch(cfg): guest search cards (title/company/location/age/url), cheap.
@@ -41,7 +41,7 @@ def fetch(cfg: dict) -> list[Job]:
                     "keywords": query,
                     "location": "India",
                     "f_TPR": f"r{seconds}",
-                    "f_E": "2,3",  # entry / associate — 2 YoE band
+                    "f_E": "2,3",  # entry / associate - 2 YoE band
                     "start": start,
                 }
                 if location == "Remote":
@@ -52,7 +52,7 @@ def fetch(cfg: dict) -> list[Job]:
                     print(f"  [linkedin] '{query}' ({location}) request failed: {e}")
                     return jobs
                 if r.status_code != 200:
-                    print(f"  [linkedin] HTTP {r.status_code} — aborting source for this run")
+                    print(f"  [linkedin] HTTP {r.status_code} - aborting source for this run")
                     return jobs
                 count = _parse_cards(r.text, location == "Remote", jobs, by_url, cfg)
                 if count == 0:
@@ -73,7 +73,7 @@ def fetch(cfg: dict) -> list[Job]:
                     print(f"  [linkedin abroad] '{query}' ({region}) failed: {e}")
                     return jobs
                 if r.status_code != 200:
-                    print(f"  [linkedin abroad] HTTP {r.status_code} — stopping abroad pass")
+                    print(f"  [linkedin abroad] HTTP {r.status_code} - stopping abroad pass")
                     return jobs
                 n = _parse_cards(r.text, True, jobs, by_url, cfg, force_abroad=True)
                 print(f"  [linkedin abroad] '{query}' ({region}): {n} cards")
@@ -92,7 +92,7 @@ def _parse_cards(html: str, remote: bool, jobs: list[Job], by_url: dict,
             continue
         url = a["href"].split("?")[0]
         if url in by_url:
-            # same posting seen again — a remote-filtered sighting proves
+            # same posting seen again - a remote-filtered sighting proves
             # the already-collected job is remote-friendly
             if remote:
                 by_url[url].remote = True
@@ -104,7 +104,7 @@ def _parse_cards(html: str, remote: bool, jobs: list[Job], by_url: dict,
         loc_el = card.select_one(".job-search-card__location")
         loc_text = loc_el.get_text(strip=True) if loc_el else ""
         # a "remote" card pinned to a foreign city (NY, Berlin, Singapore…) is
-        # country-restricted remote at a foreign company — tag abroad, keep it
+        # country-restricted remote at a foreign company - tag abroad, keep it
         abroad = force_abroad or (remote and not eligible(loc_text, cfg))
         rel = time_el.get_text(strip=True) if time_el else ""
         epoch = to_epoch(rel)

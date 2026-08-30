@@ -3,8 +3,8 @@ set -e
 
 # first run: seed the mounted volume with editable configs
 mkdir -p /data/briefs /data/study/topics /data/logs
-[ -f /data/config.yaml ]  || { cp config.example.yaml  /data/config.yaml;  echo "seeded /data/config.yaml  — edit it for your search"; }
-[ -f /data/profile.yaml ] || { cp profile.example.yaml /data/profile.yaml; echo "seeded /data/profile.yaml — put YOUR skills/resume facts in it"; }
+[ -f /data/config.yaml ]  || { cp config.example.yaml  /data/config.yaml;  echo "seeded /data/config.yaml  - edit it for your search"; }
+[ -f /data/profile.yaml ] || { cp profile.example.yaml /data/profile.yaml; echo "seeded /data/profile.yaml - put YOUR skills/resume facts in it"; }
 
 # optional background refresh loop (the dashboard also auto-refreshes on open)
 if [ "${JOBSCOUT_REFRESH_EVERY_HOURS:-0}" -gt 0 ] 2>/dev/null; then

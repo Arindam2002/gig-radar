@@ -8,13 +8,13 @@
 name: Your Name
 email: you@example.com
 phone: "+00-0000000000"
-headline: "Software Engineer — Backend Systems"
+headline: "Software Engineer - Backend Systems"
 experience_years: 2
 current_ctc_lpa: 0                 # current compensation (₹ LPA), used in docs only
 resume_path: /path/to/your/resume.pdf
 
 # ── skills ──────────────────────────────────────────────────────────
-# core: the identity of your target role. Scoring SATURATES at 4 core hits —
+# core: the identity of your target role. Scoring SATURATES at 4 core hits -
 #       depth beats breadth, so a JD listing 18 commodity keywords can't
 #       outrank a focused role in your specialty.
 # Each entry: concept -> list of text variants that count as a match.

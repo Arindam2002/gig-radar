@@ -1,8 +1,8 @@
 """Company-tier classification: enterprise / growth / startup / staffing / unknown.
 
 Two layers, cached forever in the companies table (each company classified once):
-  1. Heuristics — curated name lists + agency patterns, free and instant.
-  2. Gemini batch classification (flash-lite) for the rest — one call covers
+  1. Heuristics - curated name lists + agency patterns, free and instant.
+  2. Gemini batch classification (flash-lite) for the rest - one call covers
      ~40 companies, leaning on the model's world knowledge.
 """
 import json
@@ -42,7 +42,7 @@ _STAFFING = re.compile(
 
 
 def heuristic_tier(company: str) -> str:
-    """'' when the heuristics don't know — caller escalates to Gemini."""
+    """'' when the heuristics don't know - caller escalates to Gemini."""
     name = company or ""
     if _STAFFING.search(name):
         return "staffing"

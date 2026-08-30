@@ -3,7 +3,7 @@
 config.yaml
 profile.yaml
 
-# user data — lives locally (or in the mounted ./data volume)
+# user data - lives locally (or in the mounted ./data volume)
 jobscout.db*
 data/
 briefs/

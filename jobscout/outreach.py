@@ -1,4 +1,4 @@
-"""Contact discovery + email drafting. Drafts only — nothing is ever sent.
+"""Contact discovery + email drafting. Drafts only - nothing is ever sent.
 
 Contact layers (all publicly-sourced):
   1. extract_emails: hiring emails pasted into JD text (automatic at ingest)
@@ -55,7 +55,7 @@ def _search_items(raw: str) -> list[dict]:
 
 def find_hr_profiles(company: str, limit: int = 5) -> list[dict]:
     """Public HR/TA LinkedIn profiles via Firecrawl web search (search results
-    only — no LinkedIn scraping, no logins)."""
+    only - no LinkedIn scraping, no logins)."""
     query = f'"{company}" (recruiter OR "talent acquisition" OR "HR manager") site:linkedin.com/in'
     out = _firecrawl(["search", query, "--limit", str(limit), "--json"])
     results = []
@@ -146,14 +146,14 @@ def draft_email(profile: dict, job: dict) -> dict:
     top = ", ".join(matched[:3]) if matched else "backend and AI infrastructure"
     highlight = _pick_highlight(profile, matched, job.get("description", ""))
     name = profile.get("name", "")
-    subject = f"{job['title']} @ {job['company']} — {name}, {profile.get('experience_years', 2)} YoE backend/AI infra"
+    subject = f"{job['title']} @ {job['company']} - {name}, {profile.get('experience_years', 2)} YoE backend/AI infra"
     body = f"""Hi{{name}},
 
 I came across the {job['title']} opening at {job['company']} and it lines up closely with what I do: {top}.
 
 {highlight}
 
-I'm currently a Software Engineer at Gothia Digital Solutions (remote, Sweden-based team) exploring my next role. I'd love to be considered for this position — resume attached. Happy to share more or do a quick call whenever convenient.
+I'm currently a Software Engineer at Gothia Digital Solutions (remote, Sweden-based team) exploring my next role. I'd love to be considered for this position - resume attached. Happy to share more or do a quick call whenever convenient.
 
 Best,
 {name}
@@ -165,7 +165,7 @@ Best,
 def draft_speculative(profile: dict, company: str, fit_note: str = "") -> dict:
     h = profile.get("highlights", {})
     name = profile.get("name", "")
-    subject = f"Backend/AI-infra engineer ({profile.get('experience_years', 2)} YoE) — open to opportunities at {company}"
+    subject = f"Backend/AI-infra engineer ({profile.get('experience_years', 2)} YoE) - open to opportunities at {company}"
     fit_line = f" {fit_note.strip().rstrip('.')}." if fit_note else ""
     body = f"""Hi{{name}},
 
@@ -173,7 +173,7 @@ I've been following {company} and really like what you're building.{fit_line} I 
 
 I'm a backend engineer focused on AI infrastructure. {h.get('llm', '')} {h.get('scale', '')}
 
-If there's a team where this profile could help, I'd love to talk — resume attached.
+If there's a team where this profile could help, I'd love to talk - resume attached.
 
 Best,
 {name}
@@ -183,7 +183,7 @@ Best,
 
 
 # ── Gemini-powered drafting (optional) ──────────────────────────────
-# A free-tier API key from https://aistudio.google.com works — the Google AI
+# A free-tier API key from https://aistudio.google.com works - the Google AI
 # Pro subscription itself does not include API credits, but the free tier is
 # more than enough for drafting.
 

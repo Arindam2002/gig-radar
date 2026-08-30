@@ -84,7 +84,7 @@
     multi-tenant SaaS, REST APIs, SQL Server, microservices, CI/CD with Azure
     DevOps, TypeScript frontend integration, MongoDB reporting store, Redis
     cache, OAuth flows.
-  note: rev-1 scored this ABOVE the AI-infra dream JD (59.2 vs 54.6) — the
+  note: rev-1 scored this ABOVE the AI-infra dream JD (59.2 vs 54.6) - the
     inversion this test exists to prevent.
 
 - label: acceptable

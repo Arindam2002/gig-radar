@@ -19,7 +19,7 @@ def get(url: str, *, delay: float = 1.0, **kwargs) -> requests.Response:
 
 
 def parse_pylist(value) -> list:
-    """Himalayas ships stringified Python lists ("['United States']") — not JSON."""
+    """Himalayas ships stringified Python lists ("['United States']") - not JSON."""
     if isinstance(value, list):
         return value
     if not value or value in ("None", "null"):
@@ -42,7 +42,7 @@ def eligible(restriction_text: str, cfg: dict) -> bool:
 
 def classify_market(restriction_text: str, cfg: dict) -> str:
     """'ok' = doable from India; 'abroad' = foreign-restricted (US/EU/… company
-    role — interesting for relocation or if they flex on location)."""
+    role - interesting for relocation or if they flex on location)."""
     return "ok" if eligible(restriction_text, cfg) else "abroad"
 
 
@@ -84,7 +84,7 @@ def looks_english(text: str) -> bool:
     if not text:
         return False
     if re.search(r"\((m/w/d|w/m/d|m/f/d)\)", text, re.I):
-        # the (m/w/d) marker itself is fine — German words are the signal
+        # the (m/w/d) marker itself is fine - German words are the signal
         pass
     german = re.search(
         r"\b(mitarbeiter|werkstudent|entwickler|berater|kaufmann|fachkraft|"

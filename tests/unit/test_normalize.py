@@ -23,7 +23,7 @@ CORPUS = [
     ("₹1,00,00,000 - 1,50,00,000 P.A.", (100, 150, "INR")),
     ("$120,000", (120000, 120000, "USD")),
     ("$150,000/yr", (150000, 150000, "USD")),
-    # rev-1 accidental match via "pa" in "package" — now via Indian commas
+    # rev-1 accidental match via "pa" in "package" - now via Indian commas
     ("Salary package 5,00,000 - 7,00,000", (5, 7, "INR")),
     # unsupported currencies must be flagged, not scored as undisclosed
     ("€70,000 - €90,000", (None, None, "UNSUPPORTED")),

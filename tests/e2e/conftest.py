@@ -85,12 +85,12 @@ def server(tmp_path_factory):
     briefs = root / "briefs"
     briefs.mkdir()
     (briefs / "TODAY.md").write_text(
-        f"# 📋 Daily brief — test\n\n"
+        f"# 📋 Daily brief - test\n\n"
         f"**Apply sprint:**\n\n"
-        f"- **87** [AI Infrastructure Engineer](https://x/AI-Infrastructure-Engineer) — "
-        f"Sarvam AI · ₹35–45 LPA — *Why you: vLLM stack match.*\n"
-        f"- **60** [Unknown External Job](https://elsewhere.example/job/123) — "
-        f"NotInDb Corp — *no buttons expected*\n")
+        f"- **87** [AI Infrastructure Engineer](https://x/AI-Infrastructure-Engineer) - "
+        f"Sarvam AI · ₹35–45 LPA - *Why you: vLLM stack match.*\n"
+        f"- **60** [Unknown External Job](https://elsewhere.example/job/123) - "
+        f"NotInDb Corp - *no buttons expected*\n")
     env = dict(os.environ, JOBSCOUT_DB=str(db_path), JOBSCOUT_DISABLE_REFRESH="1",
                JOBSCOUT_NO_LLM="1", JOBSCOUT_BRIEFS=str(briefs))
     proc = subprocess.Popen(

@@ -1,4 +1,4 @@
-# Claude extras — the intelligent layer
+# Claude extras - the intelligent layer
 
 The Docker/local app is fully functional on its own (deterministic pipeline,
 dashboard, `brief.py`). This folder adds the **agentic layer** for people who
@@ -8,7 +8,7 @@ run shell commands and edit files on a schedule):
 | Extra | What it does |
 |---|---|
 | [daily-brief-routine.md](daily-brief-routine.md) | A scheduled task prompt: every morning an agent refreshes the data, reads your **resume as ground truth**, judges the fresh jobs (not just keyword scores), writes a bounded apply-sprint brief with a "why you" hook per pick, and maintains a spaced-repetition study base with interview prep derived from the JDs you're actually applying to. |
-| [teach-study-skill/SKILL.md](teach-study-skill/SKILL.md) | A `/teach-study` skill: an interactive tutor over the study base — quiz-first Socratic teaching, diagram drawing, and interviewer role-play for the resume cross-examination drills. |
+| [teach-study-skill/SKILL.md](teach-study-skill/SKILL.md) | A `/teach-study` skill: an interactive tutor over the study base - quiz-first Socratic teaching, diagram drawing, and interviewer role-play for the resume cross-examination drills. |
 
 ## Setup (Claude Code)
 
@@ -29,6 +29,6 @@ works in any Claude Code session.
 
 ## Not using Claude?
 
-The prompt in `daily-brief-routine.md` is agent-agnostic — any agent that can
+The prompt in `daily-brief-routine.md` is agent-agnostic - any agent that can
 read files, run `python run.py`, query SQLite, and write markdown can execute
 it. Point your agent of choice at it on whatever scheduler you like.

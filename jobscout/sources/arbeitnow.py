@@ -1,4 +1,4 @@
-"""Arbeitnow — mostly on-site German-language roles (verified 91%).
+"""Arbeitnow - mostly on-site German-language roles (verified 91%).
 
 Kept on a tight leash: remote==true AND English title AND query match.
 Expected yield ~4 jobs/run; drop the source if it stays useless.

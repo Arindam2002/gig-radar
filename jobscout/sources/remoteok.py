@@ -1,4 +1,4 @@
-"""RemoteOK — flat ~100-item feed, first element is a legal notice.
+"""RemoteOK - flat ~100-item feed, first element is a legal notice.
 
 Salary fields are 0 in ~98% of records (verified); title-only keyword filter
 because tags are noise.

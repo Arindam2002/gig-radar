@@ -1,5 +1,5 @@
 # ── Job Scout configuration ──────────────────────────────────────────
-# Copy to config.yaml and tune. No code changes needed — this file IS the
+# Copy to config.yaml and tune. No code changes needed - this file IS the
 # product surface. Everything below ships with sensible defaults for a
 # backend/AI engineer searching India + remote; edit for your own market.
 
@@ -14,7 +14,7 @@ search:
   freshness_hours: 48            # only fetch/flag jobs newer than this
   experience_years: 2            # your years of experience (source filters)
 
-# salary is FILTER/DISPLAY ONLY — it never affects the match score
+# salary is FILTER/DISPLAY ONLY - it never affects the match score
 salary:
   india_floor_lpa: 28            # hide below this (₹ lakhs/year)
   india_target_lpa: [32, 40]
@@ -48,7 +48,7 @@ refresh:
   stale_after_hours: 3
 
 # ── API keys ─────────────────────────────────────────────────────────
-# DO NOT put keys here. Set them in .env (see .env.example) — they are
+# DO NOT put keys here. Set them in .env (see .env.example) - they are
 # overlaid onto this section at load time.
 keys:
   adzuna_app_id: ""
@@ -61,7 +61,7 @@ sources:
   linkedin: true                 # public guest pages, two-stage, low volume
   naukri: true                   # via Firecrawl JS rendering (needs FIRECRAWL_API_KEY)
   himalayas: true
-  remotive: true                 # fixed ~20-job sample feed — near-zero cost
+  remotive: true                 # fixed ~20-job sample feed - near-zero cost
   remoteok: true
   arbeitnow: true
   adzuna: false                  # auto-enabled when keys present

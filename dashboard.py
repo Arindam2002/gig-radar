@@ -32,7 +32,7 @@ st.set_page_config(page_title="Job Scout", page_icon="🎯", layout="wide")
 # (layered grays over flat black; single intentional accent; muted semantics).
 st.markdown("""<style>
 #MainMenu, footer, header[data-testid="stHeader"] {visibility: hidden; height: 0;}
-/* the reopen-sidebar button lives inside the hidden header — keep it usable */
+/* the reopen-sidebar button lives inside the hidden header - keep it usable */
 [data-testid="stExpandSidebarButton"] {visibility: visible; position: fixed;
     top: .7rem; left: .7rem; z-index: 999; background: rgba(26,30,39,.9);
     border-radius: 9px;}
@@ -72,7 +72,7 @@ div[data-testid="stMarkdownContainer"] h2 {font-size: 1.12rem;}
 div[data-testid="stMarkdownContainer"] h3 {font-size: 1.0rem;}
 div[data-testid="stMarkdownContainer"] a {color: #aab8f5;}
 /* activity calendar: clickable button grid, hardened cross-browser.
-   min-width:0 matters — Safari's default button min-width is what turned the
+   min-width:0 matters - Safari's default button min-width is what turned the
    grid into scattered pills. */
 .cal-head {text-align:center; font-weight:600; font-size:.85rem; padding-top:.15rem;}
 .cal-dow {font-size:.6rem; opacity:.45; text-align:center; padding:1px 0;}
@@ -117,7 +117,7 @@ def refresh_running() -> bool:
     except ValueError:
         LOCK.unlink(missing_ok=True)
         return False
-    # reap our own finished child — a zombie still answers os.kill(pid, 0),
+    # reap our own finished child - a zombie still answers os.kill(pid, 0),
     # which is exactly how the status once got stuck on "fetching…"
     try:
         done, _ = os.waitpid(pid, os.WNOHANG)
@@ -125,7 +125,7 @@ def refresh_running() -> bool:
             LOCK.unlink(missing_ok=True)
             return False
     except ChildProcessError:
-        pass  # not our child (e.g. dashboard restarted) — fall through
+        pass  # not our child (e.g. dashboard restarted) - fall through
     try:
         stat = subprocess.run(["ps", "-p", str(pid), "-o", "stat="],
                               capture_output=True, text=True, timeout=5).stdout.strip()
@@ -192,7 +192,7 @@ _is_stale = _last is None or (datetime.now(timezone.utc).timestamp() - _last) > 
 if "auto_refresh_done" not in st.session_state:
     st.session_state.auto_refresh_done = True
     if CFG.get("refresh", {}).get("auto_on_open", True) and _is_stale and start_refresh():
-        st.toast("Data was stale — fetching fresh listings in the background…", icon="⟳")
+        st.toast("Data was stale - fetching fresh listings in the background…", icon="⟳")
 
 
 # ── small helpers ───────────────────────────────────────────────────
@@ -232,7 +232,7 @@ def card_html(row) -> str:
     matched = json.loads(row["matched_skills"] or "[]")
     chips = []
     sal = salary_of(row)
-    if sal != "—":
+    if sal != "-":
         chips.append(f'<span class="chip pay">💰 {esc(sal)}</span>')
     if row["exp_min"] is not None and not pd.isna(row["exp_min"]):
         hi = row["exp_max"]
@@ -313,7 +313,7 @@ def topic_focus_panel():
         return
     with st.container(border=True):
         tc1, tc2 = st.columns([6, 1])
-        tc1.caption("📚 Study focus — from a topic link")
+        tc1.caption("📚 Study focus - from a topic link")
         if tc2.button("✕ Close", key="close_topic"):
             st.query_params.clear()
             st.rerun()
@@ -327,11 +327,11 @@ BRIEFS_DIR = briefs_dir()
 
 _BULLET_LINK = re.compile(
     r"^\s*[-*]\s+.*?\[(?P<title>[^\]]+)\]\((?P<url>https?://[^\)]+)\)"
-    r"(?:\s+—\s+(?P<company>[^·—]+))?")
+    r"(?:\s+[—–-]\s+(?P<company>[^·—–-]+))?")  # em/en dash or hyphen
 
 
 def _job_for_bullet(m) -> "sqlite3.Row | None":
-    # primary: URL hash. Fallback: title (+ company) — the stored URL may have
+    # primary: URL hash. Fallback: title (+ company) - the stored URL may have
     # been upgraded to another source's link by the dedupe merge.
     uh = db.url_hash(m.group("url"))
     if uh:
@@ -354,7 +354,7 @@ def _job_for_bullet(m) -> "sqlite3.Row | None":
 
 def render_brief_interactive(md: str):
     """Render the brief, attaching status actions to every pick that maps to a
-    DB row — apply from the brief itself instead of re-finding the job."""
+    DB row - apply from the brief itself instead of re-finding the job."""
     buffer: list[str] = []
 
     def flush():
@@ -380,7 +380,7 @@ def render_brief_interactive(md: str):
                     st.rerun()
                 if b2.button("✓", key=f"td_ap_{job['id']}", help="Mark applied"):
                     db.set_status(conn, job["id"], "applied")
-                    st.toast(f"Applied — {job['company']}", icon="✅")
+                    st.toast(f"Applied - {job['company']}", icon="✅")
                     st.rerun()
                 if b3.button("✕", key=f"td_dm_{job['id']}", help="Dismiss"):
                     db.set_status(conn, job["id"], "dismissed")
@@ -398,7 +398,7 @@ def page_today():
         mtime = datetime.fromtimestamp(today_md.stat().st_mtime, tz=timezone.utc)
         age_h = (datetime.now(timezone.utc) - mtime).total_seconds() / 3600
         if age_h > 26:
-            st.warning(f"This brief is {age_h/24:.1f} days old — run "
+            st.warning(f"This brief is {age_h/24:.1f} days old - run "
                        "`python brief.py` (or wait for the daily routine).")
         render_brief_interactive(today_md.read_text())
     else:
@@ -413,7 +413,7 @@ def page_today():
 
 def page_fresh():
     topic_focus_panel()
-    page_header("🔥 Fresh matches", "score · pick · apply — filters live in the sidebar")
+    page_header("🔥 Fresh matches", "score · pick · apply - filters live in the sidebar")
 
     # filters belong to THIS page only
     with st.sidebar:
@@ -469,7 +469,7 @@ def page_fresh():
         out = out[out["exp_min"].isna() | (out["exp_min"] <= max_exp)]
         if out.empty:
             # .apply() on an empty frame returns a column-less result that
-            # breaks boolean indexing and the later sort — bail out intact
+            # breaks boolean indexing and the later sort - bail out intact
             return out
 
         def sal_ok(r):
@@ -531,10 +531,10 @@ def _render_contacts(df: pd.DataFrame):
 
 
 def _outreach_job(row):
-    with st.expander(f"{row['title']} — {row['company']}  ·  {row['status'].upper()}"):
+    with st.expander(f"{row['title']} - {row['company']}  ·  {row['status'].upper()}"):
         suit = outreach.cold_mail_suitability(row["company"], CFG["companies"].get("boost"))
         st.caption("🎯 good cold-mail target" if suit == "good"
-                   else "🏢 big company — apply via their portal, mail as a nudge")
+                   else "🏢 big company - apply via their portal, mail as a nudge")
 
         # one action row: links · contact tools · status
         a1, a2, a3, a4 = st.columns([1.1, 1.4, 1.3, 1.3])
@@ -576,7 +576,7 @@ def _outreach_job(row):
                             res = outreach.hunter_domain_search(domain, hunter_key)
                             st.write(f"Pattern: `{res['pattern']}`")
                             for e in res["emails"]:
-                                st.write(f"- {e['email']} ({e['name']} — {e['position']})")
+                                st.write(f"- {e['email']} ({e['name']} - {e['position']})")
                         except Exception as e:
                             st.error(f"Hunter failed: {e}")
         with a4:
@@ -611,12 +611,12 @@ def _outreach_job(row):
                             model=CFG.get("llm", {}).get("draft_model",
                                                          "gemini-3.6-flash"))
                 except Exception as e:
-                    st.warning(f"Gemini failed ({e}) — using template draft")
+                    st.warning(f"Gemini failed ({e}) - using template draft")
             if d is None:
                 d = outreach.draft_email(PROFILE, payload)
             greet = f" {row['contact_name'].split()[0]}" if row["contact_name"] else ""
             st.text_input("Subject", d["subject"], key=f"sub_{row['id']}")
-            st.text_area("Body — copy & send from your mail",
+            st.text_area("Body - copy & send from your mail",
                          d["body"].replace("{name}", greet), height=280,
                          key=f"bod_{row['id']}")
 
@@ -667,18 +667,18 @@ def page_outreach():
         odf = jobs_df("status IN ('shortlisted','applied','outreach','replied')")
         odf = odf.sort_values("status_updated_at", ascending=False)
         if odf.empty:
-            st.info("Nothing here yet — hit **⭐ Shortlist** on a job in Fresh matches.")
+            st.info("Nothing here yet - hit **⭐ Shortlist** on a job in Fresh matches.")
         for _, row in odf.iterrows():
             _outreach_job(row)
     else:
-        st.caption("Companies worth a speculative 'any openings?' mail — even without "
+        st.caption("Companies worth a speculative 'any openings?' mail - even without "
                    "a listing. Grows automatically; add more with `python run.py --prospects`.")
         cdf = pd.read_sql_query(
             """SELECT * FROM companies
                WHERE status IN ('prospect','outreach','replied','conversation')
                ORDER BY status_updated_at DESC""", conn)
         if cdf.empty:
-            st.info("No prospects yet — run `python run.py --prospects`.")
+            st.info("No prospects yet - run `python run.py --prospects`.")
         for _, comp in cdf.head(30).iterrows():
             _outreach_prospect(comp)
 
@@ -686,7 +686,7 @@ def page_outreach():
 def _activity_calendar():
     """Day details on the left, a compact clickable month grid on the right.
 
-    The grid uses real Streamlit buttons + session state — NOT ?day= links:
+    The grid uses real Streamlit buttons + session state - NOT ?day= links:
     anchor navigation forces a full browser reload, buttons rerun in place.
     """
     import calendar as cal_mod
@@ -748,7 +748,7 @@ def _activity_calendar():
             conn, params=(sel_day,))
         nice = datetime.fromisoformat(sel_day).strftime("%a, %d %b")
         if day_ev.empty and comp_ev.empty:
-            st.caption(f"{nice} — no activity. Pick a highlighted day on the calendar.")
+            st.caption(f"{nice} - no activity. Pick a highlighted day on the calendar.")
             return
         applied_n = (day_ev["status"] == "applied").sum()
         out_n = (day_ev["status"] == "outreach").sum() + \
@@ -771,7 +771,7 @@ def _activity_calendar():
 
 def page_tracker():
     topic_focus_panel()
-    page_header("📊 Tracker", "follow-ups first — everything else is bookkeeping")
+    page_header("📊 Tracker", "follow-ups first - everything else is bookkeeping")
     now = datetime.now(timezone.utc)
     week = (now - timedelta(days=7)).isoformat()
     applied_cut = (now - timedelta(days=7)).isoformat()
@@ -795,13 +795,13 @@ def page_tracker():
             for _, r in fu.iterrows():
                 days = (now - datetime.fromisoformat(r["status_updated_at"])).days \
                     if r["status_updated_at"] else "?"
-                st.markdown(f"- **{r['title']}** — {r['company']} · _{r['status']} "
-                            f"{days}d ago, no response — follow up_ · [listing ↗]({r['url']})")
+                st.markdown(f"- **{r['title']}** - {r['company']} · _{r['status']} "
+                            f"{days}d ago, no response - follow up_ · [listing ↗]({r['url']})")
             for _, r in cfu.iterrows():
                 days = (now - datetime.fromisoformat(r["status_updated_at"])).days \
                     if r["status_updated_at"] else "?"
                 st.markdown(f"- **{r['company']}** (prospect) · _outreach {days}d ago, "
-                            f"no response — follow up_")
+                            f"no response - follow up_")
 
     st.markdown("#### Pipeline")
     main_statuses = ["new", "shortlisted", "applied", "outreach", "replied",
@@ -844,7 +844,7 @@ def page_tracker():
     with st.expander(f"All tracked jobs ({len(tdf)})"):
         for _, row in tdf.iterrows():
             c1, c2 = st.columns([5.2, 1.15], vertical_alignment="center")
-            c1.markdown(f'<div class="trow"><b>{esc(row["title"])}</b> — '
+            c1.markdown(f'<div class="trow"><b>{esc(row["title"])}</b> - '
                         f'{esc(row["company"])} · <a href="{esc(row["url"])}">↗</a></div>',
                         unsafe_allow_html=True)
             new_status = c2.selectbox("status", db.JOB_STATUSES,
@@ -858,7 +858,7 @@ def page_tracker():
 def page_study():
     topic_focus_panel()
     page_header("📚 Study", "spaced-repetition base built from the jobs you're "
-                "applying to — /teach-study in Claude to be taught")
+                "applying to - /teach-study in Claude to be taught")
     sdir = study_dir()
     study_md = sdir / "STUDY.md"
     topics_dir = sdir / "topics"
@@ -876,7 +876,7 @@ def page_study():
         st.markdown(linkify_topics(study_md.read_text()), unsafe_allow_html=True)
         st.caption("Topic deep-dives will appear here after the daily routine's next run.")
     else:
-        st.info("The study base is created by the daily `job-scout-daily-brief` routine — "
+        st.info("The study base is created by the daily `job-scout-daily-brief` routine - "
                 "run it once (Scheduled sidebar → Run now) to start it.")
 
 

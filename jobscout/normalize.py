@@ -1,10 +1,10 @@
 """Normalization: salary text → comparable numbers, timestamps → sortable epochs.
 
-Salary rules (order matters — each documented failure below was a rev-1 bug):
+Salary rules (order matters - each documented failure below was a rev-1 bug):
   1. Detect pay period first: hourly → ×2080 (flagged contract), monthly → ×12.
   2. USD/EUR/GBP patterns run before naked-digit INR ("USD 150,000 PA" must not
      parse as ₹1.5 LPA).
-  3. INR needs an anchored marker (lpa/lakh/₹/rs/p.a./per annum) — "pa" inside
+  3. INR needs an anchored marker (lpa/lakh/₹/rs/p.a./per annum) - "pa" inside
      "package" must not count.
   4. Sanity clamps: INR 1–200 LPA, USD $10K–$1M; out-of-range → rejected.
 INR results are in LPA; USD annual dollars; EUR/GBP → currency 'UNSUPPORTED'.
@@ -82,12 +82,12 @@ _HOURLY = re.compile(r"(/\s*h(ou)?r|per\s+hour|hourly|an\s+hour)\b", re.I)
 _MONTHLY = re.compile(r"(/\s*mo(nth)?\b|per\s+month|monthly|p\.?m\.?\b)", re.I)
 
 _NUM = r"(\d{1,3}(?:[,.]\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)"
-_RANGE_SEP = r"\s*(?:-|–|—|to)\s*"
+_RANGE_SEP = r"\s*(?:-|–|-|to)\s*"
 
 # anchored: "pa" inside "package" and "rs" inside "years" must NOT match
 _INR_MARK = (r"(?:\b(?:lpa|lacs?|lakhs?|inr|crores?|cr)\b|\bper\s+annum\b"
              r"|\bp\.?\s?a\.?(?!\w)|\brs\.?(?!\w)|₹)")
-# 2-digit middle comma groups (5,00,000) are uniquely Indian — implicit INR
+# 2-digit middle comma groups (5,00,000) are uniquely Indian - implicit INR
 _INDIAN_COMMAS = re.compile(r"\d{1,2},\d{2},\d{3}")
 
 _LAKH_RANGE = re.compile(
@@ -211,7 +211,7 @@ def salary_display(min_v, max_v, currency, raw="") -> str:
     if min_v is None:
         if currency == "UNSUPPORTED":
             return raw or "non-USD"
-        return raw or "—"
+        return raw or "-"
     if currency == "INR":
         if min_v == max_v:
             return f"₹{min_v:g} LPA"

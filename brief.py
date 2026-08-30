@@ -5,7 +5,7 @@
   python brief.py --no-fetch    brief from existing data only
 
 Designed for cron (see README). The brief is deliberately BOUNDED: ~10 jobs,
-follow-ups due, one prospect — a 30-minute sprint, then study, done for the day.
+follow-ups due, one prospect - a 30-minute sprint, then study, done for the day.
 """
 import argparse
 import json
@@ -85,7 +85,7 @@ def next_prospect(conn):
 def build_brief(conn, cfg, profile) -> str:
     now = datetime.now(timezone.utc)
     today = now.strftime("%A, %d %b %Y")
-    lines = [f"# 📋 Daily brief — {today}", ""]
+    lines = [f"# 📋 Daily brief - {today}", ""]
 
     picks = pick_top_jobs(conn)
     total = sum(len(v) for v in picks.values())
@@ -97,7 +97,7 @@ def build_brief(conn, cfg, profile) -> str:
         for r in rows:
             reloc = " ✈️" if r["relocation"] else ""
             exp = f" · {int(r['exp_min'])}+ yrs" if r["exp_min"] is not None else ""
-            lines.append(f"- **{r['score']:.0f}** [{r['title']}]({r['url']}) — "
+            lines.append(f"- **{r['score']:.0f}** [{r['title']}]({r['url']}) - "
                          f"{r['company']} · {_sal(r)}{exp}{reloc}")
         lines.append("")
 
@@ -106,7 +106,7 @@ def build_brief(conn, cfg, profile) -> str:
         lines.append("### 🔔 Follow-ups due")
         for r in fus:
             days = (now - datetime.fromisoformat(r["status_updated_at"])).days
-            lines.append(f"- [{r['title']}]({r['url']}) — {r['company']} "
+            lines.append(f"- [{r['title']}]({r['url']}) - {r['company']} "
                          f"(_{r['status']} {days}d ago, nudge them_)")
         lines.append("")
 
@@ -114,7 +114,7 @@ def build_brief(conn, cfg, profile) -> str:
     if p:
         link = f" ([hiring team]({p['li_url'].rstrip('/')}/people/))" if p["li_url"] else ""
         lines += ["### 🎯 One cold-mail prospect",
-                  f"- **{p['name']}** — {p['fit_note'] or 'good fit'}{link}", ""]
+                  f"- **{p['name']}** - {p['fit_note'] or 'good fit'}{link}", ""]
 
     # study drop
     key = cfg.get("keys", {}).get("gemini_api_key")
@@ -124,7 +124,7 @@ def build_brief(conn, cfg, profile) -> str:
             model = cfg.get("llm", {}).get("extract_model", "gemini-3.1-flash-lite")
             lines.append(daily_prep_md(conn, profile, key, model))
         except Exception as e:
-            lines.append(f"_Prep generation failed ({str(e)[:80]}) — see gap report below._")
+            lines.append(f"_Prep generation failed ({str(e)[:80]}) - see gap report below._")
     else:
         lines.append("_Add a Gemini key in config.yaml to get a generated daily prep drop._")
 

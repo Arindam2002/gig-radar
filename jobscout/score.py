@@ -1,10 +1,10 @@
 """Match scoring: 0-100, fully local.
 
-  up to 55: core-skill overlap, SATURATING at 4 concept hits — a focused
+  up to 55: core-skill overlap, SATURATING at 4 concept hits - a focused
             AI-infra JD with 5 core concepts beats an enterprise JD listing
             18 commodity technologies (rev-1 ranked those backwards).
   up to 15: transferable-skill coverage (fractional).
-  up to 30: title fit — weighted MAX over patterns, not a hit count.
+  up to 30: title fit - weighted MAX over patterns, not a hit count.
   penalties: anti_skills (-8 each, capped -24), anti_titles (-25),
              blocklisted company -> 0.
 
