@@ -1,0 +1,63 @@
+# ── Candidate profile ────────────────────────────────────────────────
+# Copy to profile.yaml and make it YOURS. This drives the deterministic
+# match scoring and the outreach email templates.
+#
+# Fastest way to fill it in: give this file + your resume to an AI assistant
+# and ask it to populate the skills/weights/highlights from the resume.
+
+name: Your Name
+email: you@example.com
+phone: "+00-0000000000"
+headline: "Software Engineer — Backend Systems"
+experience_years: 2
+current_ctc_lpa: 0                 # current compensation (₹ LPA), used in docs only
+resume_path: /path/to/your/resume.pdf
+
+# ── skills ──────────────────────────────────────────────────────────
+# core: the identity of your target role. Scoring SATURATES at 4 core hits —
+#       depth beats breadth, so a JD listing 18 commodity keywords can't
+#       outrank a focused role in your specialty.
+# Each entry: concept -> list of text variants that count as a match.
+core_skills:
+  python: [python]
+  fastapi: [fastapi]
+  kubernetes: [kubernetes, k8s]
+  docker: [docker, containers, containerization]
+  observability: [observability, prometheus, grafana, telemetry]
+  # add the 8-15 concepts that define the roles you WANT
+
+# transferable: real skills you have that shouldn't drag you toward
+# more-of-the-same work you're leaving. Contribute a little, capped.
+transferable_skills:
+  sql: [sql, postgresql, mysql]
+  ci/cd: ["ci/cd", cicd, "github actions"]
+  rest api: ["rest api", "rest apis", restful]
+
+# anti-signals: subtract points. Tech that marks a role you'd never take.
+anti_skills:
+  - sharepoint
+  - "manual testing"
+  - wordpress
+
+# ── titles ──────────────────────────────────────────────────────────
+# weighted MAX (not a hit count): the single best-matching pattern wins.
+# Give your dream-role titles ~30 and generic ones single digits.
+title_weights:
+  "backend": 24
+  "platform engineer": 22
+  "python": 16
+  "software engineer": 8
+  "sde": 8
+  "developer": 6
+
+anti_titles:                       # -25 points: titles you're not hunting for
+  - "support engineer"
+  - "qa engineer"
+
+# ── outreach ────────────────────────────────────────────────────────
+# 3-4 quantified achievements from your resume, keyed by theme.
+# The email drafter picks the best-fitting one per job.
+highlights:
+  backend: "One sentence with real numbers about your best backend achievement."
+  reliability: "One sentence about an incident/reliability win, with numbers."
+  scale: "One sentence about scale you've handled, with numbers."

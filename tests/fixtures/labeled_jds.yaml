@@ -1,0 +1,131 @@
+# Labeled JD fixtures for the scoring ranking test.
+# Labels: dream (must rank top), acceptable (middle), reject (must rank bottom).
+# The ranking assertion is min(dream) > max(reject); two-extremes-only testing
+# is banned (it's how rev-1's inversion stayed invisible).
+
+- label: dream
+  title: AI Infrastructure Engineer
+  company: Sarvam AI
+  description: >
+    We are building India's foundational AI platform. You will own our LLM
+    inference stack: vLLM deployments on GPU clusters, quantization (FP8/AWQ),
+    continuous batching, KV-cache optimization, and Kubernetes-based
+    autoscaling. Experience with PyTorch, CUDA profiling, Prometheus/Grafana
+    observability, and Python services (FastAPI) required. You will run
+    fine-tuning pipelines (LoRA) and evaluate model quality in production.
+
+- label: dream
+  title: LLM Inference Engineer
+  company: Together Labs
+  description: >
+    Optimize large language model serving at scale. Work on vLLM and custom
+    inference engines, GPU utilization, speculative decoding, and low-latency
+    serving. Python, PyTorch, Docker, Kubernetes. You will build telemetry with
+    Prometheus and own production reliability of model serving infrastructure.
+
+- label: dream
+  title: Machine Learning Platform Engineer
+  company: Glean
+  description: >
+    Build the ML platform powering enterprise search: model serving, embeddings
+    pipelines, vector databases, RAG infrastructure, GPU scheduling on
+    Kubernetes. Strong Python, experience with inference optimization and
+    observability stacks. Kafka for event streaming.
+
+- label: dream
+  title: Backend Engineer - AI Platform
+  company: Perplexity
+  description: >
+    Backend engineer for our AI answer engine. Python, FastAPI, LLM
+    orchestration, agentic workflows with tool calling, retrieval augmented
+    generation, GPU inference services, and high-throughput APIs. Docker,
+    Kubernetes, Postgres. You will own latency and reliability of AI services.
+
+- label: dream
+  title: GenAI Engineer
+  company: Fractal
+  description: >
+    Design and deploy generative AI solutions: LLM fine-tuning, RAG systems,
+    agent frameworks, inference serving with vLLM, embeddings, vector
+    databases. Python, PyTorch, FastAPI, cloud GPU infrastructure, MLOps
+    practices, CI/CD.
+
+- label: acceptable
+  title: Senior Backend Engineer
+  company: Razorpay
+  description: >
+    Build payment infrastructure at scale. Design microservices in Python and
+    Go, REST APIs, Kafka event pipelines, Redis caching, MySQL, Docker and
+    Kubernetes deployments, CI/CD with GitHub Actions, strong observability
+    culture with Prometheus and Grafana.
+
+- label: acceptable
+  title: Software Engineer - Platform
+  company: CRED
+  description: >
+    Platform team building internal developer tooling: service scaffolding,
+    deployment pipelines, Kubernetes operators, observability (Prometheus,
+    Grafana), and multi-tenant infrastructure. Python or Java, Docker, CI/CD.
+
+- label: acceptable
+  title: Backend Developer (Python)
+  company: Zerodha
+  description: >
+    Python backend developer for trading systems. FastAPI or Flask, PostgreSQL,
+    Redis, Kafka streams, REST APIs, high-concurrency services, monitoring and
+    alerting. Clean code and strong testing discipline.
+
+- label: acceptable
+  title: .NET Software Engineer
+  company: Enterprise CRM Corp
+  description: >
+    Maintain and extend our enterprise CRM. C#, ASP.NET Core, Entity Framework,
+    SignalR, CQRS with MediatR, Cosmos DB, Azure App Services, JWT auth, RBAC,
+    multi-tenant SaaS, REST APIs, SQL Server, microservices, CI/CD with Azure
+    DevOps, TypeScript frontend integration, MongoDB reporting store, Redis
+    cache, OAuth flows.
+  note: rev-1 scored this ABOVE the AI-infra dream JD (59.2 vs 54.6) — the
+    inversion this test exists to prevent.
+
+- label: acceptable
+  title: Data Engineer
+  company: Meesho
+  description: >
+    Build data pipelines with Spark and Kafka, orchestrate with Airflow,
+    Python, SQL, warehouse modeling, streaming ingestion, data quality
+    monitoring, AWS cloud infrastructure.
+
+- label: reject
+  title: SAP ABAP Consultant
+  company: Infosys
+  description: >
+    SAP ABAP development for enterprise clients. ABAP, SAP HANA, module pool
+    programming, SmartForms, functional specs, on-site client coordination.
+
+- label: reject
+  title: Manual Test Engineer
+  company: Wipro
+  description: >
+    Manual testing of web applications. Test case authoring, regression
+    suites, defect tracking in JIRA, UAT support, some Selenium exposure.
+
+- label: reject
+  title: WordPress Developer
+  company: Digital Agency
+  description: >
+    Build client websites in WordPress and PHP. Theme customization, plugins,
+    WooCommerce, HTML/CSS, jQuery, cPanel deployments.
+
+- label: reject
+  title: Salesforce Administrator
+  company: CloudOps Services
+  description: >
+    Salesforce configuration, flows, reports and dashboards, user management,
+    AppExchange integrations, Apex triggers maintenance.
+
+- label: reject
+  title: Desktop Support Engineer
+  company: TechSupport Inc
+  description: >
+    L1/L2 desktop support, Windows troubleshooting, Active Directory, ticket
+    queues, hardware provisioning, printer and VPN support.

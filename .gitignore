@@ -1,0 +1,22 @@
+# ── secrets & personal data (never commit) ─────────────────────────
+.env
+config.yaml
+profile.yaml
+
+# user data — lives locally (or in the mounted ./data volume)
+jobscout.db*
+data/
+briefs/
+study/
+logs/
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/

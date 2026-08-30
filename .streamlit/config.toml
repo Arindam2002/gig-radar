@@ -1,0 +1,11 @@
+# Calm dark theme: layered slate surfaces, one muted indigo accent.
+# (Replaces Streamlit's default saturated red primary.)
+[theme]
+base = "dark"
+primaryColor = "#8b9cf7"
+backgroundColor = "#12151c"
+secondaryBackgroundColor = "#1a1e27"
+textColor = "#d7dce5"
+
+[browser]
+gatherUsageStats = false

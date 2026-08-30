@@ -1,0 +1,68 @@
+# ── Job Scout configuration ──────────────────────────────────────────
+# Copy to config.yaml and tune. No code changes needed — this file IS the
+# product surface. Everything below ships with sensible defaults for a
+# backend/AI engineer searching India + remote; edit for your own market.
+
+search:
+  queries:                       # what to search on every source
+    - "backend engineer"
+    - "ai infrastructure engineer"
+    - "llm engineer"
+    - "platform engineer"
+    - "machine learning engineer"
+    - "python backend developer"
+  freshness_hours: 48            # only fetch/flag jobs newer than this
+  experience_years: 2            # your years of experience (source filters)
+
+# salary is FILTER/DISPLAY ONLY — it never affects the match score
+salary:
+  india_floor_lpa: 28            # hide below this (₹ lakhs/year)
+  india_target_lpa: [32, 40]
+  remote_floor_usd: 60000
+
+companies:
+  blocklist: []                  # case-insensitive substring, e.g. ["wipro"]
+  boost: []                      # +10 score, e.g. ["anthropic"]
+
+# remote listings must be open to one of these (or unrestricted) to count as
+# doable-from-home; foreign-restricted roles are kept but tagged "abroad"
+eligibility:
+  allow: [worldwide, anywhere, global, india, apac, asia, "asia/pacific", remote]
+
+linkedin:
+  detail_budget_per_run: 15      # full-JD fetches per run (4s delay each)
+
+firecrawl:                       # needs FIRECRAWL_API_KEY in .env
+  naukri_queries_per_run: 3      # firecrawl-rendered Naukri search pages per run
+
+llm:                             # needs GEMINI_API_KEY in .env
+  # Free-tier daily quotas are PER MODEL. Bulk JD extraction runs on the
+  # lite model (large daily cap); email drafts use the smarter model.
+  extract_model: gemini-3.1-flash-lite
+  draft_model: gemini-3.6-flash
+  extract_budget_per_run: 25     # JDs per run for structured extraction
+  seconds_between_calls: 6       # stays under the ~10 RPM free-tier pace
+
+refresh:
+  auto_on_open: true             # dashboard kicks off a background fetch when stale
+  stale_after_hours: 3
+
+# ── API keys ─────────────────────────────────────────────────────────
+# DO NOT put keys here. Set them in .env (see .env.example) — they are
+# overlaid onto this section at load time.
+keys:
+  adzuna_app_id: ""
+  adzuna_app_key: ""
+  jsearch_rapidapi_key: ""
+  hunter_api_key: ""
+  gemini_api_key: ""
+
+sources:
+  linkedin: true                 # public guest pages, two-stage, low volume
+  naukri: true                   # via Firecrawl JS rendering (needs FIRECRAWL_API_KEY)
+  himalayas: true
+  remotive: true                 # fixed ~20-job sample feed — near-zero cost
+  remoteok: true
+  arbeitnow: true
+  adzuna: false                  # auto-enabled when keys present
+  jsearch: false

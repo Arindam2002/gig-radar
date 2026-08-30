@@ -1,0 +1,14 @@
+services:
+  jobscout:
+    build: .
+    image: jobscout:latest
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/data          # ALL your data stays here, on your machine
+    env_file:
+      - path: .env            # your API keys (cp .env.example .env)
+        required: false
+    environment:
+      JOBSCOUT_REFRESH_EVERY_HOURS: "3"
+    restart: unless-stopped
