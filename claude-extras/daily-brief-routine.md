@@ -47,30 +47,44 @@ Docker: `docker compose exec jobscout python run.py`).
 6. **One cold-mail prospect**: from companies (status='prospect',
    suitability='good'), one line on why it fits the resume.
 
-## Part 2 - Study base (cumulative, spaced repetition)
+## Part 2 - Study base (cumulative, spaced repetition, PACED BY THE USER)
 
 The study base lives at study/STUDY.md (master: revision queue, topic index,
 daily log) and study/topics/<kebab-slug>.md (one deep-dive file per topic).
 Read STUDY.md first.
 
-7. **Choose today's topics** (4-5 total): 1-2 from the revision queue due today
+7. **Read the user's completion state**: query the study_progress table in
+   jobscout.db (columns: slug, completed_at). A topic counts as STUDIED only
+   if completed_at is newer than the topic file's mtime. Respect their pace:
+   never deepen an un-studied topic (keep it due, roll +2 days, mark it
+   "waiting on you"); if 5+ topics are un-studied, create at most ONE new
+   topic today instead of two. NEVER write to study_progress yourself - only
+   the user ticks topics off, on the dashboard's Study page.
+
+8. **Choose today's topics** (2-5 total, respecting rule 7): 1-2 STUDIED
+   topics from the revision queue due today
    (spaced repetition: 1, 3, 7, then 21 days after last touched), 2 NEW
    technical topics derived from today's pick JDs (balanced over time across
    DSA patterns, system design, the candidate's backend stack, and their
    specialty; GENERIC mid-size-company/MNC interview style, never
    early-startup-specific), and 1 RESUME-DRILL topic (step 9).
 
-8. **Write/extend technical topic files** in study/topics/:
+9. **Write/extend technical topic files** in study/topics/:
    - NEW topic → create <slug>.md: `# <Topic>` / `## Concept` (first
      principles, ~200 words) / `## Why interviewers ask this` / `## Q&A` (3-4
      questions, each with a COMPLETE teaching answer - reasoning and
      trade-offs, not bullet fragments) / `## Mental model` (describe the
      diagram to draw, renderable by a teaching session) / `## Deepen next time`
      (2-3 harder unanswered follow-ups).
-   - REVISION topic → open its file, ANSWER the "Deepen next time" questions,
-     add 1-2 harder Q&As, refresh "Deepen next time". Never duplicate; deepen.
+   - REVISION topic (studied ones only) → open its file, ANSWER the "Deepen
+     next time" questions, add 1-2 harder Q&As, refresh "Deepen next time".
+     Never duplicate; deepen.
+   - **DSA topics: every named problem carries a practice link.** Use
+     https://neetcode.io/problems/<slug> for problems in the NeetCode roadmap,
+     otherwise the leetcode.com URL. Add a `## Practice` section listing the
+     pattern's problems with links, easy to hard.
 
-9. **Resume drill** - files named study/topics/resume-<slug>.md, one per major
+10. **Resume drill** - files named study/topics/resume-<slug>.md, one per major
    resume claim. Rotate: each day cover the next uncovered claim, or deepen one
    due for revision. Structure: `# Resume drill: <Claim>` / `## The claim`
    (quote the resume) / `## Interviewer probes` (5-6 cross-examination
@@ -79,13 +93,13 @@ Read STUDY.md first.
    candidate's voice, grounded ONLY in what the resume supports - mark gaps
    with "[FILL: …]") / `## Weak spots` / `## Deepen next time`.
 
-10. **Update study/STUDY.md**: revision-queue table (due dates 1d/3d/7d/21d
+11. **Update study/STUDY.md**: revision-queue table (due dates 1d/3d/7d/21d
     after today for topics touched today), topic-index table (track column),
     and PREPEND one daily-log entry.
 
 ## Part 3 - The brief
 
-11. **Write the brief** to BOTH briefs/TODAY.md and briefs/YYYY-MM-DD.md.
+12. **Write the brief** to BOTH briefs/TODAY.md and briefs/YYYY-MM-DD.md.
     Start with "# 📋 Daily brief - <Weekday, DD Mon YYYY>". Sections: Apply
     sprint (why-you lines, job URLs as links) / Follow-ups due / One cold-mail
     prospect / 📚 Today's study (SHORT: topics with one-line hooks and
@@ -98,7 +112,7 @@ Read STUDY.md first.
 ## Hard constraints
 - NEVER send emails or submit applications; never change job statuses; never
   modify config.yaml, profile.yaml, code, or the resume.
-- Run run.py at most once. ~10 picks max. 4-5 study topics max per day.
+- Run run.py at most once. ~10 picks max. 2-5 study topics per day per rule 7.
 - Study base edits are append/deepen only.
 - If the DB is locked briefly, retry - the dashboard may be open (WAL).
 

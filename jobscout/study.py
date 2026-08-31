@@ -145,6 +145,8 @@ names. Format as markdown:
 
 ## 🧮 DSA (2 problems)
 State each problem (LeetCode-medium level, name the pattern). No solutions.
+For each problem add a practice link: https://neetcode.io/problems/<slug> when
+it is in the NeetCode roadmap, otherwise the leetcode.com problem URL.
 
 ## 🏗 System design (1 prompt)
 One design prompt typical of SDE-2 interviews, with 3 probing follow-up questions.

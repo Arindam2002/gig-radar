@@ -864,6 +864,41 @@ def page_study():
     topics_dir = sdir / "topics"
     topic_files = sorted(topics_dir.glob("*.md")) if topics_dir.exists() else []
     if topic_files:
+        # ── completion checklist: your pace, not the generator's ──
+        progress = db.study_progress_map(conn)
+
+        def studied(f: Path) -> bool:
+            ca = progress.get(f.stem)
+            if not ca:
+                return False
+            try:
+                # topic deepened AFTER you studied it -> back to to-study
+                return datetime.fromisoformat(ca).timestamp() >= f.stat().st_mtime
+            except ValueError:
+                return False
+
+        done_files = [f for f in topic_files if studied(f)]
+        todo_files = [f for f in topic_files if not studied(f)]
+        c1, c2 = st.columns([3, 1.2], vertical_alignment="center")
+        c1.markdown(f"**Checklist** · {len(done_files)}/{len(topic_files)} studied"
+                    + (f" · **{len(todo_files)} to go**" if todo_files else " · all caught up 🎉"))
+        c2.progress(len(done_files) / len(topic_files))
+        with st.container(border=True):
+            for f in topic_files:
+                done = studied(f)
+                updated = (f.stem in progress) and not done
+                label = f.stem.replace("-", " ").title()
+                if updated:
+                    label += "  ·  updated since you studied it"
+                val = st.checkbox(label, value=done, key=f"sp_{f.stem}")
+                if val != done:
+                    db.set_study_done(conn, f.stem, val)
+                    st.rerun()
+        st.caption("Tick a topic once you've actually worked through it (reading, "
+                   "or a /teach-study session). Unticked topics are held by the "
+                   "daily routine: they stay due and don't get deepened further "
+                   "until you catch up.")
+
         names = ["📖 Overview (STUDY.md)"] + [f.stem.replace("-", " ").title()
                                               for f in topic_files]
         choice = st.selectbox("Topic", names, key="study_topic")

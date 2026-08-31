@@ -90,9 +90,9 @@ def test_abroad_market_filter(dash, server):
 def test_topic_link_opens_focus_panel(page, server):
     """?topic=<slug> links (rewritten from file links) open the study focus
     panel on any tab (regression: raw file links were dead)."""
-    page.goto(server["url"] + "/?topic=dotnet-async-concurrency")
+    page.goto(server["url"] + "/?topic=demo-alpha-topic")
     page.wait_for_selector("text=Study focus", timeout=30000)
-    assert page.locator("text=async/await internals >> visible=true").count() >= 1
+    assert page.locator("text=Demo Alpha Topic >> visible=true").count() >= 1
 
 
 def test_brief_actions_apply_from_today_page(page, server):
@@ -125,6 +125,26 @@ def test_sidebar_reopens_after_collapse(dash, server):
     reopen.first.click()
     dash.wait_for_timeout(800)
     assert dash.locator("text=Fresh matches >> visible=true").count() >= 1
+
+
+def test_study_checklist_tracks_completion(dash, server):
+    """Study page shows a completion checklist; ticking a topic persists to
+    the study_progress table and updates the counter."""
+    goto_page(dash, server, "/study")
+    assert dash.locator("text=Checklist >> visible=true").count() >= 1
+    assert dash.locator("text=0/2 studied >> visible=true").count() >= 1
+    dash.get_by_text("Demo Alpha Topic", exact=False).first.click()
+    dash.wait_for_timeout(1500)
+    assert dash.locator("text=1/2 studied >> visible=true").count() >= 1
+    conn = db_conn(server)
+    row = conn.execute("SELECT completed_at FROM study_progress WHERE slug=?",
+                       ("demo-alpha-topic",)).fetchone()
+    conn.close()
+    assert row is not None and row["completed_at"]
+    # untick to leave state clean for other tests
+    dash.get_by_text("Demo Alpha Topic", exact=False).first.click()
+    dash.wait_for_timeout(1200)
+    assert dash.locator("text=0/2 studied >> visible=true").count() >= 1
 
 
 def test_activity_calendar(dash, server):

@@ -96,6 +96,11 @@ CREATE TABLE IF NOT EXISTS status_events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_at ON status_events(at);
 
+CREATE TABLE IF NOT EXISTS study_progress (
+    slug            TEXT PRIMARY KEY,
+    completed_at    TEXT
+);
+
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER);
 """
 
@@ -423,3 +428,25 @@ def add_contact(conn: sqlite3.Connection, *, job_id: str = "", company_id: str =
            VALUES (?,?,?,?,?,?,?)""",
         (job_id, company_id, name, url, email, source, now_iso()))
     conn.commit()
+
+
+# ── study progress ──────────────────────────────────────────────────
+
+def set_study_done(conn: sqlite3.Connection, slug: str, done: bool):
+    """Mark a study topic as studied (or clear it). completed_at is compared
+    with the topic file's mtime: a topic deepened AFTER being studied counts
+    as to-study again ("updated since you read it")."""
+    if done:
+        conn.execute(
+            "INSERT INTO study_progress (slug, completed_at) VALUES (?, ?) "
+            "ON CONFLICT(slug) DO UPDATE SET completed_at=excluded.completed_at",
+            (slug, now_iso()))
+    else:
+        conn.execute("DELETE FROM study_progress WHERE slug=?", (slug,))
+    conn.commit()
+
+
+def study_progress_map(conn: sqlite3.Connection) -> dict:
+    """slug -> completed_at (ISO)."""
+    return {r["slug"]: r["completed_at"]
+            for r in conn.execute("SELECT slug, completed_at FROM study_progress")}

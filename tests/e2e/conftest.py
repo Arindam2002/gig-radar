@@ -82,6 +82,13 @@ def server(tmp_path_factory):
     root = tmp_path_factory.mktemp("e2e")
     db_path = root / "e2e.db"
     seed(db_path)
+    study = root / "study"
+    (study / "topics").mkdir(parents=True)
+    (study / "STUDY.md").write_text("# Study Base\n\ntest study base\n")
+    (study / "topics" / "demo-alpha-topic.md").write_text(
+        "# Demo Alpha Topic\n\n## Concept\ntest\n")
+    (study / "topics" / "demo-beta-topic.md").write_text(
+        "# Demo Beta Topic\n\n## Concept\ntest\n")
     briefs = root / "briefs"
     briefs.mkdir()
     (briefs / "TODAY.md").write_text(
@@ -92,7 +99,8 @@ def server(tmp_path_factory):
         f"- **60** [Unknown External Job](https://elsewhere.example/job/123) - "
         f"NotInDb Corp - *no buttons expected*\n")
     env = dict(os.environ, JOBSCOUT_DB=str(db_path), JOBSCOUT_DISABLE_REFRESH="1",
-               JOBSCOUT_NO_LLM="1", JOBSCOUT_BRIEFS=str(briefs))
+               JOBSCOUT_NO_LLM="1", JOBSCOUT_BRIEFS=str(briefs),
+               JOBSCOUT_STUDY=str(study))
     proc = subprocess.Popen(
         [str(ROOT / ".venv/bin/python"), "-m", "streamlit", "run",
          str(ROOT / "dashboard.py"), "--server.port", str(PORT),

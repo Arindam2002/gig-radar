@@ -217,3 +217,16 @@ def test_companies_and_contacts(tmp_path):
     db.add_contact(conn, company_id=cid, name="A", url="https://li/in/a", source="firecrawl")
     db.add_contact(conn, company_id=cid, name="A", url="https://li/in/a", source="firecrawl")
     assert conn.execute("SELECT COUNT(*) c FROM contacts").fetchone()["c"] == 1
+
+
+def test_study_progress(tmp_path):
+    conn = fresh(tmp_path)
+    assert db.study_progress_map(conn) == {}
+    db.set_study_done(conn, "llm-serving", True)
+    m = db.study_progress_map(conn)
+    assert "llm-serving" in m and m["llm-serving"]
+    first = m["llm-serving"]
+    db.set_study_done(conn, "llm-serving", True)  # re-tick refreshes timestamp
+    assert db.study_progress_map(conn)["llm-serving"] >= first
+    db.set_study_done(conn, "llm-serving", False)
+    assert db.study_progress_map(conn) == {}
