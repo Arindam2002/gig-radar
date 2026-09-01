@@ -96,6 +96,8 @@ def server(tmp_path_factory):
         f"**Apply sprint:**\n\n"
         f"- **87** [AI Infrastructure Engineer](https://x/AI-Infrastructure-Engineer) - "
         f"Sarvam AI · ₹35–45 LPA - *Why you: vLLM stack match.*\n"
+        f"**2. [LLM Platform Engineer — Glean](https://x/LLM-Platform-Engineer)** · "
+        f"growth · numbered-bold format\n"
         f"- **60** [Unknown External Job](https://elsewhere.example/job/123) - "
         f"NotInDb Corp - *no buttons expected*\n")
     env = dict(os.environ, JOBSCOUT_DB=str(db_path), JOBSCOUT_DISABLE_REFRESH="1",

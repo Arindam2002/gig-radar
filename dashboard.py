@@ -325,9 +325,14 @@ def topic_focus_panel():
 
 BRIEFS_DIR = briefs_dir()
 
+# a "pick" line: a bullet ("- **87** [job](url)") OR a numbered pick in any
+# bold variant ("**1. [job](url)** ·", "1. **[job](url)**") - agent-written
+# briefs drift in format, so match the shapes, not one shape. Table rows and
+# blockquotes are left alone (splitting them out would mangle the markdown).
 _BULLET_LINK = re.compile(
-    r"^\s*[-*]\s+.*?\[(?P<title>[^\]]+)\]\((?P<url>https?://[^\)]+)\)"
-    r"(?:\s+[—–-]\s+(?P<company>[^·—–-]+))?")  # em/en dash or hyphen
+    r"^\s*(?:[-*]\s+|\*{0,2}\d+\.\s*\*{0,2})"
+    r"[^|>]*?\[(?P<title>[^\]]+)\]\((?P<url>https?://[^\)]+)\)"
+    r".*?(?:\s+[—–-]\s+(?P<company>[^·—–-]+))?$")
 
 
 def _job_for_bullet(m) -> "sqlite3.Row | None":
@@ -339,16 +344,24 @@ def _job_for_bullet(m) -> "sqlite3.Row | None":
                            (uh,)).fetchone()
         if row:
             return row
-    rows = conn.execute("SELECT id, status, company FROM jobs WHERE title=?",
-                        (m.group("title").strip(),)).fetchall()
-    if len(rows) == 1:
-        return rows[0]
-    comp = db.norm_company((m.group("company") or "").strip())
-    if comp:
-        for r in rows:
-            rc = db.norm_company(r["company"])
-            if rc.startswith(comp) or comp.startswith(rc):
-                return r
+    # link text is either "Title" or "Title — Company, City" - try both splits
+    link_text = m.group("title").strip()
+    candidates = [(link_text, (m.group("company") or "").strip())]
+    parts = re.split(r"\s+[—–]\s+| - ", link_text, maxsplit=1)
+    if len(parts) == 2:
+        comp_part = parts[1].split(",")[0].strip()  # "Mastercard, Pune" -> "Mastercard"
+        candidates.insert(0, (parts[0].strip(), comp_part))
+    for title, company in candidates:
+        rows = conn.execute("SELECT id, status, company FROM jobs WHERE title=?",
+                            (title,)).fetchall()
+        if len(rows) == 1:
+            return rows[0]
+        comp = db.norm_company(company)
+        if comp:
+            for r in rows:
+                rc = db.norm_company(r["company"])
+                if rc.startswith(comp) or comp.startswith(rc):
+                    return r
     return None
 
 

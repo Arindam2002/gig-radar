@@ -100,6 +100,10 @@ def test_brief_actions_apply_from_today_page(page, server):
     the job down in Fresh matches."""
     goto_page(page, server, "/")
     # DB-matched pick has action buttons; unknown external link has none
+    # numbered-bold pick format must also get action buttons
+    glean_row = page.locator("div[data-testid='stHorizontalBlock']",
+                             has_text="LLM Platform Engineer").last
+    assert glean_row.get_by_text("⭐", exact=True).count() >= 1
     row = page.locator("div[data-testid='stHorizontalBlock']",
                        has_text="AI Infrastructure Engineer").last
     row.get_by_text("✓", exact=True).first.click()
@@ -157,8 +161,11 @@ def test_activity_calendar(dash, server):
     # seeded events (applied/shortlisted) happened at seed time = today
     assert dash.locator("text=applied >> visible=true").count() >= 1
     assert dash.locator("text=Razorpay >> visible=true").count() >= 1
-    # clicking another day updates the panel IN PLACE (websocket rerun)
-    dash.locator(".st-key-calgrid button").filter(has_text=re.compile(r"^1$")).first.click()
+    # clicking another (event-free, non-today) day updates the panel IN PLACE
+    from datetime import date
+    day = "15" if date.today().day != 15 else "16"
+    dash.locator(".st-key-calgrid button").filter(
+        has_text=re.compile(rf"^{day}$")).first.click()
     dash.wait_for_timeout(1500)
     assert dash.locator("text=no activity >> visible=true").count() >= 1
 
