@@ -868,6 +868,72 @@ def page_tracker():
                 st.rerun()
 
 
+def _md_section(md: str, header: str) -> str:
+    """Text under '## <header>' up to the next '## '."""
+    m = re.search(rf"^##\s+{re.escape(header)}\s*$(.*?)(?=^##\s|\Z)",
+                  md, re.M | re.S | re.I)
+    return m.group(1).strip() if m else ""
+
+
+def _first_sentences(text: str, n_words: int = 45) -> str:
+    words = " ".join(text.split()).split(" ")
+    out = " ".join(words[:n_words])
+    return out + ("…" if len(words) > n_words else "")
+
+
+def _session_card(col, tag: str, f, body_html: str):
+    with col, st.container(border=True):
+        title = f.stem.replace("-", " ").title().replace("Resume ", "Resume drill: ")
+        st.markdown(f'<div class="jcard-sub">{tag}</div>'
+                    f'<div class="jcard-title">{esc(title)}</div>',
+                    unsafe_allow_html=True)
+        st.markdown(body_html, unsafe_allow_html=True)
+        st.markdown(f'<a href="?topic={f.stem}" target="_self">📖 open the full topic</a>',
+                    unsafe_allow_html=True)
+
+
+def _todays_session(topic_files, studied):
+    """The daily worksheet: solve / learn / rehearse, picked deterministically
+    from the oldest unticked topic in each lane. Never empty while anything
+    is unstudied - independent of what the routine did today."""
+    unticked = [f for f in topic_files if not studied(f)]
+    if not unticked:
+        st.success("Everything in the study base is ticked off. New material "
+                   "lands with the next routine run. 🎉")
+        return
+    unticked.sort(key=lambda f: f.stat().st_mtime)  # oldest debt first
+    dsa = next((f for f in unticked if f.stem.startswith("dsa-")), None)
+    drill = next((f for f in unticked if f.stem.startswith("resume-")), None)
+    tech = next((f for f in unticked if f is not dsa and f is not drill), None)
+
+    st.markdown("#### 🗓 Today's session")
+    cols = st.columns(3, gap="medium")
+    if dsa is not None:
+        md = dsa.read_text()
+        links = re.findall(r"\[([^\]]+)\]\((https?://[^\)]+)\)",
+                           _md_section(md, "Practice"))[:3]
+        body = "<br>".join(f'<a href="{esc(u)}">{esc(t)}</a>' for t, u in links) \
+            or esc(_first_sentences(_md_section(md, "Concept")))
+        _session_card(cols[0], "SOLVE · warm-up problems", dsa, body)
+    else:
+        cols[0].caption("No DSA topic pending.")
+    if tech is not None:
+        body = esc(_first_sentences(_md_section(tech.read_text(), "Concept")))
+        _session_card(cols[1], "LEARN · one concept", tech, body)
+    else:
+        cols[1].caption("No tech topic pending.")
+    if drill is not None:
+        probes = re.findall(r"^\s*\d+\.\s+(.{10,140})",
+                            _md_section(drill.read_text(), "Interviewer probes"), re.M)[:2]
+        body = "<br>".join(f"· {esc(p)}" for p in probes) or "Cross-examination drill."
+        _session_card(cols[2], "REHEARSE · resume drill", drill, body)
+    else:
+        cols[2].caption("No resume drill pending.")
+    st.caption("Picked from your oldest unstudied topics. Do these three, tick "
+               "them off below, and tomorrow's session moves forward.")
+    st.divider()
+
+
 def page_study():
     topic_focus_panel()
     page_header("📚 Study", "spaced-repetition base built from the jobs you're "
@@ -889,6 +955,8 @@ def page_study():
                 return datetime.fromisoformat(ca).timestamp() >= f.stat().st_mtime
             except ValueError:
                 return False
+
+        _todays_session(topic_files, studied)
 
         done_files = [f for f in topic_files if studied(f)]
         todo_files = [f for f in topic_files if not studied(f)]

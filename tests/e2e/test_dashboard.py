@@ -135,9 +135,13 @@ def test_study_checklist_tracks_completion(dash, server):
     """Study page shows a completion checklist; ticking a topic persists to
     the study_progress table and updates the counter."""
     goto_page(dash, server, "/study")
+    # the daily worksheet renders above the checklist (learn lane from the
+    # seeded demo topics; dsa/resume lanes empty in fixtures)
+    assert dash.locator("text=Today's session >> visible=true").count() >= 1
+    assert dash.locator("text=LEARN >> visible=true").count() >= 1
     assert dash.locator("text=Checklist >> visible=true").count() >= 1
     assert dash.locator("text=0/2 studied >> visible=true").count() >= 1
-    dash.get_by_text("Demo Alpha Topic", exact=False).first.click()
+    dash.locator("div[data-testid='stCheckbox']", has_text="Demo Alpha Topic").first.click()
     dash.wait_for_timeout(1500)
     assert dash.locator("text=1/2 studied >> visible=true").count() >= 1
     conn = db_conn(server)
@@ -146,7 +150,7 @@ def test_study_checklist_tracks_completion(dash, server):
     conn.close()
     assert row is not None and row["completed_at"]
     # untick to leave state clean for other tests
-    dash.get_by_text("Demo Alpha Topic", exact=False).first.click()
+    dash.locator("div[data-testid='stCheckbox']", has_text="Demo Alpha Topic").first.click()
     dash.wait_for_timeout(1200)
     assert dash.locator("text=0/2 studied >> visible=true").count() >= 1
 
