@@ -150,7 +150,14 @@ def main():
     day_file = BRIEFS / f"{datetime.now(timezone.utc):%Y-%m-%d}.md"
     day_file.write_text(md)
     (BRIEFS / "TODAY.md").write_text(md)
-    print(f"brief written: {day_file}")
+    # picks manifest: the durable contract the dashboard uses to attach
+    # apply/shortlist/dismiss buttons regardless of how the prose is formatted
+    picks = [{"url": r["url"], "title": r["title"], "company": r["company"]}
+             for rows in pick_top_jobs(conn).values() for r in rows]
+    manifest = json.dumps(picks, indent=1)
+    (BRIEFS / "TODAY.picks.json").write_text(manifest)
+    day_file.with_suffix(".picks.json").write_text(manifest)
+    print(f"brief written: {day_file} ({len(picks)} picks in manifest)")
 
 
 if __name__ == "__main__":

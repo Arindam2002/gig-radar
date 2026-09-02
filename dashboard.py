@@ -365,9 +365,56 @@ def _job_for_bullet(m) -> "sqlite3.Row | None":
     return None
 
 
+_ANY_MD_LINK = re.compile(r"\[[^\]]*\]\((https?://[^\)]+)\)")
+
+
+def _load_picks_manifest() -> dict:
+    """briefs/TODAY.picks.json: [{url, title, company}] written by the routine.
+    The durable contract - prose formats drift, the manifest does not."""
+    f = BRIEFS_DIR / "TODAY.picks.json"
+    if not f.exists():
+        return {}
+    try:
+        picks = json.loads(f.read_text())
+        return {p["url"]: p for p in picks if isinstance(p, dict) and p.get("url")}
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def _job_for_line(line: str, manifest: dict):
+    """Resolve a brief line to a DB job. Three layers, most reliable first:
+    1. any URL on the line that is in the manifest (resolved via url/title),
+    2. any URL on the line whose hash is in the DB,
+    3. the shaped bullet/numbered-pick matcher with title+company fallback.
+    Tables, blockquotes and headings are never touched."""
+    stripped = line.lstrip()
+    if not stripped or stripped[0] in "|>#":
+        return None
+    urls = _ANY_MD_LINK.findall(line)
+    for url in urls:
+        uh = db.url_hash(url)
+        if uh:
+            row = conn.execute("SELECT id, status, company FROM jobs WHERE url_hash=?",
+                               (uh,)).fetchone()
+            if row:
+                return row
+        p = manifest.get(url)
+        if p:
+            rows = conn.execute("SELECT id, status, company FROM jobs WHERE title=?",
+                                (p.get("title", ""),)).fetchall()
+            comp = db.norm_company(p.get("company", ""))
+            for r in rows:
+                rc = db.norm_company(r["company"])
+                if len(rows) == 1 or rc.startswith(comp) or (comp and comp.startswith(rc)):
+                    return r
+    m = _BULLET_LINK.match(line)
+    return _job_for_bullet(m) if m else None
+
+
 def render_brief_interactive(md: str):
     """Render the brief, attaching status actions to every pick that maps to a
     DB row - apply from the brief itself instead of re-finding the job."""
+    manifest = _load_picks_manifest()
     buffer: list[str] = []
 
     def flush():
@@ -376,8 +423,7 @@ def render_brief_interactive(md: str):
             buffer.clear()
 
     for line in md.splitlines():
-        m = _BULLET_LINK.match(line)
-        job = _job_for_bullet(m) if m else None
+        job = _job_for_line(line, manifest)
         if job is None:
             buffer.append(line)
             continue

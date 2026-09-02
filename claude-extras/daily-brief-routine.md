@@ -97,7 +97,7 @@ Read STUDY.md first.
     after today for topics touched today), topic-index table (track column),
     and PREPEND one daily-log entry.
 
-## Part 3 - The brief
+## Part 3 - The brief AND the picks manifest
 
 12. **Write the brief** to BOTH briefs/TODAY.md and briefs/YYYY-MM-DD.md.
     Start with "# 📋 Daily brief - <Weekday, DD Mon YYYY>". Sections: Apply
@@ -106,8 +106,16 @@ Read STUDY.md first.
     study/topics/<slug>.md links) / optional "⚠️ Profile sync suggested" note
     if the resume and profile.yaml skills have clearly diverged (do NOT edit
     profile.yaml yourself). Keep the brief bounded - it is a 30-minute morning
-    ritual, not homework. The dashboard's Today page renders TODAY.md and
-    attaches apply/shortlist/dismiss buttons to every pick automatically.
+    ritual, not homework. Prose format and layout are yours to choose freely.
+
+13. **MANDATORY - write the picks manifest.** The dashboard attaches
+    apply/shortlist/dismiss buttons from this file, NOT from your prose, so
+    this is a hard contract: write briefs/TODAY.picks.json AND
+    briefs/YYYY-MM-DD.picks.json - a JSON array with exactly one object per
+    apply-sprint pick: {"url": "<exact listing URL linked in the brief>",
+    "title": "<job title as stored in the jobs table>", "company": "<company
+    as stored in the jobs table>"}. Copy title/company from the DB rows, not
+    from your own rephrasing. A brief without its manifest is incomplete.
 
 ## Hard constraints
 - NEVER send emails or submit applications; never change job statuses; never
@@ -116,7 +124,7 @@ Read STUDY.md first.
 - Study base edits are append/deepen only.
 - If the DB is locked briefly, retry - the dashboard may be open (WAL).
 
-Success = TODAY.md freshly written; topic files created/deepened with
+Success = TODAY.md freshly written AND TODAY.picks.json lists every pick; topic files created/deepened with
 complete-answer Q&As incl. one resume drill; STUDY.md queue, index, and daily
 log updated consistently.
 ```

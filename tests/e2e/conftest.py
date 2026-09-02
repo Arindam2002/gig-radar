@@ -99,7 +99,13 @@ def server(tmp_path_factory):
         f"**2. [LLM Platform Engineer — Glean](https://x/LLM-Platform-Engineer)** · "
         f"growth · numbered-bold format\n"
         f"- **60** [Unknown External Job](https://elsewhere.example/job/123) - "
-        f"NotInDb Corp - *no buttons expected*\n")
+        f"NotInDb Corp - *no buttons expected*\n\n"
+        f"**3. Desktop Support - separate-line link format**\n"
+        f"[Job posting](https://x/Desktop-Support-Engineer)\n\n"
+        f"**4. Manifest-only pick** - [details](https://moved.example/xyz)\n")
+    (briefs / "TODAY.picks.json").write_text(json.dumps([
+        {"url": "https://moved.example/xyz", "title": "GenAI Engineer",
+         "company": "Fractal"}]))
     env = dict(os.environ, JOBSCOUT_DB=str(db_path), JOBSCOUT_DISABLE_REFRESH="1",
                JOBSCOUT_NO_LLM="1", JOBSCOUT_BRIEFS=str(briefs),
                JOBSCOUT_STUDY=str(study))

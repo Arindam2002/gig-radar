@@ -104,6 +104,15 @@ def test_brief_actions_apply_from_today_page(page, server):
     glean_row = page.locator("div[data-testid='stHorizontalBlock']",
                              has_text="LLM Platform Engineer").last
     assert glean_row.get_by_text("⭐", exact=True).count() >= 1
+    # link-on-its-own-line format ("[Job posting](url)") gets buttons too
+    jp_row = page.locator("div[data-testid='stHorizontalBlock']",
+                          has_text="Job posting").last
+    assert jp_row.get_by_text("⭐", exact=True).count() >= 1
+    # a URL only the manifest knows resolves via title+company (Fractal is
+    # shortlisted, so it renders a status chip rather than buttons)
+    man_row = page.locator("div[data-testid='stHorizontalBlock']",
+                           has_text="Manifest-only pick").last
+    assert man_row.get_by_text("✓ shortlisted").count() >= 1
     row = page.locator("div[data-testid='stHorizontalBlock']",
                        has_text="AI Infrastructure Engineer").last
     row.get_by_text("✓", exact=True).first.click()
