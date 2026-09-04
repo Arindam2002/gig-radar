@@ -113,7 +113,7 @@ your resume (one pdf you keep current, that's the only maintenance)
      cut costs 40%, prove it") with model answers and weak spot notes
      |
      v
-  /teach-study, a tutor skill: quiz-first teaching over the study
+  /tutor, a tutor skill: quiz-first teaching over the study
   base, diagrams, and interviewer role-play on the resume drills
 ```
 

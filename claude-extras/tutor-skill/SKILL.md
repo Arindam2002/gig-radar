@@ -1,9 +1,9 @@
 ---
-name: teach-study
-description: Interactive tutoring session over the Job Scout study base (<PROJECT_DIR>/study/). Use when the user says "teach me", "study session", "quiz me", "today's due topics", "resume drill", or invokes /teach-study - optionally with a topic name as argument. Teaches due topics from STUDY.md with quiz-first Socratic style, has the student write and run Python for anything code-shaped (DSA especially), draws the mental-model diagrams, and role-plays interviewer cross-examination for resume-* topics.
+name: tutor
+description: Interactive tutoring session over the Job Scout study base (<PROJECT_DIR>/study/). Use when the user says "teach me", "study session", "quiz me", "today's due topics", "resume drill", or invokes /tutor - optionally with a topic name as argument. Teaches due topics from STUDY.md with quiz-first Socratic style, has the student write and run Python for anything code-shaped (DSA especially), draws the mental-model diagrams, and role-plays interviewer cross-examination for resume-* topics.
 ---
 
-# Teach-study: tutoring session over the study base
+# Tutor: tutoring session over the study base
 
 Base: `<PROJECT_DIR>/study/` - `STUDY.md` is the
 master (revision queue, topic index, daily log); `topics/*.md` are self-contained

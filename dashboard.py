@@ -1111,7 +1111,7 @@ def page_study():
     if topic_article():
         return
     page_header("📚 Study", "spaced-repetition base built from the jobs you're "
-                "applying to - /teach-study in Claude to be taught")
+                "applying to - /tutor in Claude to be taught")
     sdir = study_dir()
     study_md = sdir / "STUDY.md"
     topics_dir = sdir / "topics"
@@ -1151,7 +1151,7 @@ def page_study():
                             f'<a href="study?topic={f.stem}" target="_self">📖 read</a>'
                             f'{extra}</div>', unsafe_allow_html=True)
         st.caption("Tick a topic once you've actually worked through it (reading, "
-                   "or a /teach-study session). Unticked topics are held by the "
+                   "or a /tutor session). Unticked topics are held by the "
                    "daily routine: they stay due and don't get deepened further "
                    "until you catch up. Each topic opens on its own page, where "
                    "you can highlight text, leave notes, and mark it studied.")
