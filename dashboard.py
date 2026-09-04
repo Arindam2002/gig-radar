@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT))
 
 from jobscout import db  # noqa: E402
 from jobscout import outreach  # noqa: E402
+from jobscout import reader  # noqa: E402
 from jobscout.normalize import salary_display  # noqa: E402
 
 st.set_page_config(page_title="Job Scout", page_icon="🎯", layout="wide")
@@ -91,6 +92,11 @@ div[data-testid="stMarkdownContainer"] a {color: #aab8f5;}
     background:rgba(139,156,247,.32) !important; font-weight:700 !important;}
 .day-ev {font-size:.85rem; margin:.15rem 0; line-height:1.45;}
 .trow {font-size:.88rem; line-height:1.4;}
+/* topic page: notes list */
+.jsr-quote {font-size: .88rem; opacity: .75; font-style: italic; line-height: 1.4;}
+.jsr-note {font-size: .92rem; margin-top: .25rem; white-space: pre-wrap;}
+.jsr-note.muted {opacity: .45; font-style: italic;}
+.topic-open {font-size: .82rem; white-space: nowrap;}
 /* sidebar: roomier nav */
 section[data-testid="stSidebar"] {min-width: 240px; max-width: 240px;}
 div[data-testid="stSidebarNav"] a {border-radius: 9px;}
@@ -294,31 +300,148 @@ def jobs_df(where: str = "1=1", params: tuple = ()) -> pd.DataFrame:
 
 
 # ── study topic links ───────────────────────────────────────────────
-# STUDY.md and the briefs link topics as plain file paths (readable anywhere);
-# at render time they become ?topic=<slug> links opening a focus panel.
+# STUDY.md, the briefs and the topic files link topics as plain file paths
+# (readable anywhere): "topics/<slug>.md" from STUDY.md, "../study/topics/
+# <slug>.md" from a brief, and bare "<slug>.md" between sibling topics. At
+# render time every shape becomes a study?topic=<slug> link to the topic page.
+# Links to .md files that are not topics (session-notes.md) are left alone.
 _TOPIC_MD_LINK = re.compile(
-    r"\[([^\]]+)\]\((?:\.\./)?(?:study/)?topics/([a-zA-Z0-9\-_]+)\.md\)")
+    r"\[([^\]]+)\]\((?:\.\./)?(?:study/)?(?:topics/)?(?:\./)?"
+    r"([a-zA-Z0-9\-_]+)\.md(?:#[^)]*)?\)")
 
 
 def linkify_topics(md: str) -> str:
-    return _TOPIC_MD_LINK.sub(r'<a href="?topic=\2" target="_self">📖 \1</a>', md)
+    topics = study_dir() / "topics"
+
+    def sub(m):
+        if not (topics / f"{m.group(2)}.md").exists():
+            return m.group(0)
+        return f'<a href="study?topic={m.group(2)}" target="_self">📖 {m.group(1)}</a>'
+    return _TOPIC_MD_LINK.sub(sub, md)
 
 
-def topic_focus_panel():
+def _studied_at(completed_at: str | None, f: Path):
+    """When the topic was ticked off, or None if never / if the file was
+    deepened after that (a topic rewritten since you read it is due again)."""
+    if not completed_at:
+        return None
+    try:
+        dt = datetime.fromisoformat(completed_at)
+    except ValueError:
+        return None
+    return dt if dt.timestamp() >= f.stat().st_mtime else None
+
+
+def _back_to_study():
+    st.markdown('<a href="study" target="_self">← Back to Study</a>',
+                unsafe_allow_html=True)
+
+
+def topic_article() -> bool:
+    """?topic=<slug> turns any page into that topic's reading page: just the
+    article, your highlights and notes, and the mark-as-studied control.
+    Returns True when it rendered (the caller then skips its own page)."""
     tp = st.query_params.get("topic")
     if not tp:
-        return
-    f = study_dir() / "topics" / f"{re.sub(r'[^a-zA-Z0-9_-]', '', tp)}.md"
+        return False
+    slug = re.sub(r"[^a-zA-Z0-9_-]", "", tp)
+    f = study_dir() / "topics" / f"{slug}.md"
     if not f.exists():
-        return
-    with st.container(border=True):
-        tc1, tc2 = st.columns([6, 1])
-        tc1.caption("📚 Study focus - from a topic link")
-        if tc2.button("✕ Close", key="close_topic"):
-            st.query_params.clear()
-            st.rerun()
-        st.markdown(linkify_topics(f.read_text()), unsafe_allow_html=True)
+        _back_to_study()
+        st.warning(f"There is no study topic called `{slug}`.")
+        return True
+
+    key = f"reader_{slug}"
+
+    def on_action():
+        # Runs before the script body on every highlight action from the page,
+        # possibly on a different thread than the run that created the global
+        # connection (sqlite objects are thread-bound), so open a private one.
+        act = getattr(st.session_state.get(key), "action", None)
+        if not isinstance(act, dict):
+            return
+        kind = act.get("type")
+        c = get_conn()
+        try:
+            if kind == "add":
+                db.add_study_note(c, slug, act.get("quote", ""), act.get("prefix", ""),
+                                  act.get("suffix", ""), act.get("note", ""))
+            elif kind == "update" and act.get("id") is not None:
+                db.update_study_note(c, act["id"], act.get("note", ""))
+            elif kind == "delete" and act.get("id") is not None:
+                db.delete_study_note(c, act["id"])
+        except ValueError:
+            pass
+        finally:
+            c.close()
+
+    completed_at = db.study_progress_map(conn).get(slug)
+    studied_on = _studied_at(completed_at, f)
+    notes = db.study_notes(conn, slug)
+
+    top1, top2 = st.columns([2, 3], vertical_alignment="center")
+    with top1:
+        _back_to_study()
+    if studied_on:
+        status = f"✓ studied on {studied_on.astimezone().strftime('%d %b %Y')}"
+    elif completed_at:
+        status = "updated since you studied it"
+    else:
+        status = "not studied yet"
+    top2.markdown(f'<div class="page-sub" style="text-align:right; margin:0">'
+                  f'{status} · {len(notes)} note{"s" if len(notes) != 1 else ""}</div>',
+                  unsafe_allow_html=True)
+
+    focus = st.session_state.pop("_reader_focus", None)
+    reader.topic_reader(reader.topic_html(linkify_topics(f.read_text())), notes,
+                        key=key, on_action=on_action, focus_id=focus)
+
+    # ── notes ──
+    st.markdown("#### 🖍 Your highlights and notes")
+    if not notes:
+        st.caption("Select any text in the article to highlight it, with or without "
+                   "a note. Everything you mark is listed here so you can come back "
+                   "to it; click a highlight in the text to edit or remove it.")
+    for n in notes:
+        with st.container(border=True):
+            c1, c2, c3, c4 = st.columns([8, 1, 1, 1], vertical_alignment="center")
+            body = f'<div class="jsr-quote">“{reader.quote_preview(n["quote"])}”</div>'
+            body += (f'<div class="jsr-note">{esc(n["note"])}</div>' if n["note"]
+                     else '<div class="jsr-note muted">no note</div>')
+            c1.markdown(body, unsafe_allow_html=True)
+            if c2.button(":material/my_location:", key=f"note_go_{n['id']}",
+                         help="Show in the text"):
+                st.session_state["_reader_focus"] = n["id"]
+                st.rerun()
+            with c3.popover(":material/edit:", help="Edit the note"):
+                new = st.text_area("Note", value=n["note"] or "",
+                                   key=f"note_edit_{n['id']}", label_visibility="collapsed")
+                if st.button("Save", key=f"note_save_{n['id']}", type="primary"):
+                    db.update_study_note(conn, n["id"], new.strip())
+                    st.rerun()
+            if c4.button(":material/delete:", key=f"note_del_{n['id']}",
+                         help="Remove this highlight"):
+                db.delete_study_note(conn, n["id"])
+                st.rerun()
+
+    # ── done with it? ──
     st.divider()
+    b1, b2 = st.columns([1.4, 3], vertical_alignment="center")
+    if studied_on:
+        if b1.button("Mark as not studied", key=f"unstudy_{slug}"):
+            db.set_study_done(conn, slug, False)
+            st.rerun()
+        b2.caption("Ticked off. Unticking puts it back in today's session and "
+                   "pauses the routine's deepening of it.")
+    else:
+        label = "✓ Mark as studied again" if completed_at else "✓ Mark as studied"
+        if b1.button(label, key=f"study_{slug}", type="primary"):
+            db.set_study_done(conn, slug, True)
+            st.toast("Marked as studied", icon="✅")
+            st.rerun()
+        b2.caption("Once ticked, the daily routine may deepen this topic and its "
+                   "spaced-repetition cycle (1, 3, 7, 21 days) starts.")
+    return True
 
 
 # ── pages ───────────────────────────────────────────────────────────
@@ -451,7 +574,8 @@ def render_brief_interactive(md: str):
 
 
 def page_today():
-    topic_focus_panel()
+    if topic_article():
+        return
     today_md = BRIEFS_DIR / "TODAY.md"
     if today_md.exists():
         mtime = datetime.fromtimestamp(today_md.stat().st_mtime, tz=timezone.utc)
@@ -471,7 +595,8 @@ def page_today():
 
 
 def page_fresh():
-    topic_focus_panel()
+    if topic_article():
+        return
     page_header("🔥 Fresh matches", "score · pick · apply - filters live in the sidebar")
 
     # filters belong to THIS page only
@@ -715,7 +840,8 @@ def _outreach_prospect(comp):
 
 
 def page_outreach():
-    topic_focus_panel()
+    if topic_article():
+        return
     page_header("✉️ Outreach", "find a contact, draft the mail, send from your own "
                 "inbox, mark it sent")
     view = st.segmented_control(
@@ -829,7 +955,8 @@ def _activity_calendar():
 
 
 def page_tracker():
-    topic_focus_panel()
+    if topic_article():
+        return
     page_header("📊 Tracker", "follow-ups first - everything else is bookkeeping")
     now = datetime.now(timezone.utc)
     week = (now - timedelta(days=7)).isoformat()
@@ -934,7 +1061,7 @@ def _session_card(col, tag: str, f, body_html: str):
                     f'<div class="jcard-title">{esc(title)}</div>',
                     unsafe_allow_html=True)
         st.markdown(body_html, unsafe_allow_html=True)
-        st.markdown(f'<a href="?topic={f.stem}" target="_self">📖 open the full topic</a>',
+        st.markdown(f'<a href="study?topic={f.stem}" target="_self">📖 open the full topic</a>',
                     unsafe_allow_html=True)
 
 
@@ -981,7 +1108,8 @@ def _todays_session(topic_files, studied):
 
 
 def page_study():
-    topic_focus_panel()
+    if topic_article():
+        return
     page_header("📚 Study", "spaced-repetition base built from the jobs you're "
                 "applying to - /teach-study in Claude to be taught")
     sdir = study_dir()
@@ -992,15 +1120,10 @@ def page_study():
         # ── completion checklist: your pace, not the generator's ──
         progress = db.study_progress_map(conn)
 
+        note_counts = db.study_note_counts(conn)
+
         def studied(f: Path) -> bool:
-            ca = progress.get(f.stem)
-            if not ca:
-                return False
-            try:
-                # topic deepened AFTER you studied it -> back to to-study
-                return datetime.fromisoformat(ca).timestamp() >= f.stat().st_mtime
-            except ValueError:
-                return False
+            return _studied_at(progress.get(f.stem), f) is not None
 
         _todays_session(topic_files, studied)
 
@@ -1017,23 +1140,25 @@ def page_study():
                 label = f.stem.replace("-", " ").title()
                 if updated:
                     label += "  ·  updated since you studied it"
-                val = st.checkbox(label, value=done, key=f"sp_{f.stem}")
+                r1, r2 = st.columns([6, 2], vertical_alignment="center")
+                val = r1.checkbox(label, value=done, key=f"sp_{f.stem}")
                 if val != done:
                     db.set_study_done(conn, f.stem, val)
                     st.rerun()
+                n_notes = note_counts.get(f.stem, 0)
+                extra = f" · {n_notes} note{'s' if n_notes != 1 else ''}" if n_notes else ""
+                r2.markdown(f'<div class="topic-open" style="text-align:right">'
+                            f'<a href="study?topic={f.stem}" target="_self">📖 read</a>'
+                            f'{extra}</div>', unsafe_allow_html=True)
         st.caption("Tick a topic once you've actually worked through it (reading, "
                    "or a /teach-study session). Unticked topics are held by the "
                    "daily routine: they stay due and don't get deepened further "
-                   "until you catch up.")
+                   "until you catch up. Each topic opens on its own page, where "
+                   "you can highlight text, leave notes, and mark it studied.")
 
-        names = ["📖 Overview (STUDY.md)"] + [f.stem.replace("-", " ").title()
-                                              for f in topic_files]
-        choice = st.selectbox("Topic", names, key="study_topic")
-        if choice == names[0]:
-            st.markdown(linkify_topics(study_md.read_text()), unsafe_allow_html=True)
-        else:
-            st.markdown(linkify_topics(topic_files[names.index(choice) - 1].read_text()),
-                        unsafe_allow_html=True)
+        if study_md.exists():
+            with st.expander("Study base overview: revision queue and topic index"):
+                st.markdown(linkify_topics(study_md.read_text()), unsafe_allow_html=True)
     elif study_md.exists():
         st.markdown(linkify_topics(study_md.read_text()), unsafe_allow_html=True)
         st.caption("Topic deep-dives will appear here after the daily routine's next run.")

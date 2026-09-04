@@ -86,7 +86,8 @@ def server(tmp_path_factory):
     (study / "topics").mkdir(parents=True)
     (study / "STUDY.md").write_text("# Study Base\n\ntest study base\n")
     (study / "topics" / "demo-alpha-topic.md").write_text(
-        "# Demo Alpha Topic\n\n## Concept\ntest\n")
+        "# Demo Alpha Topic\n\n## Concept\nAlpha concept paragraph for the reader. "
+        "See also [beta](demo-beta-topic.md) and [notes](../session-notes.md).\n")
     (study / "topics" / "demo-beta-topic.md").write_text(
         "# Demo Beta Topic\n\n## Concept\ntest\n")
     briefs = root / "briefs"

@@ -80,7 +80,9 @@ plus a `FIRECRAWL_API_KEY`.
   Outreach       contacts per job, drafted emails you copy and send
                  yourself, plus speculative "any openings?" prospects
   Tracker        follow-up queue, pipeline stats, activity calendar
-  Study          the interview prep base (see below)
+  Study          the interview prep base (see below): each topic opens
+                 on its own page where you can highlight text, leave
+                 notes on it, and mark the topic studied
 ```
 
 Design choices worth knowing: nothing gets deleted, only archived (deleted

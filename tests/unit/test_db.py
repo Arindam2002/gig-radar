@@ -1,5 +1,7 @@
 import time
 
+import pytest
+
 from jobscout import db
 from jobscout.models import Job
 
@@ -177,17 +179,17 @@ def test_archive_backlog(tmp_path):
         # a real JD by default: a description-less (thin) card carries only a
         # title-derived provisional score and must survive until enriched
         db.upsert(conn, make_job(title=title, url=f"https://x/{title}",
+                                 description="" if thin else "x" * 400,
                                  extra={"posted_at_epoch": epoch or now - 3600}),
                   score, [])
-                                 description="" if thin else "x" * 400,
         if status != "new":
             jid = db.job_id("Acme", title, "Bangalore")
             db.set_status(conn, jid, status)
 
     add("Junk Role", 10)                                  # junk -> archived
+    add("Thin Junk", 10, thin=True)                       # unread card -> kept
     add("Marginal Old", 30, epoch=now - 6 * 86400)        # low+old -> archived
     add("Marginal Fresh", 30)                             # low but fresh -> kept
-    add("Thin Junk", 10, thin=True)                       # unread card -> kept
     add("Good Fresh", 80)                                 # kept
     add("Expired Good", 80, epoch=now - 12 * 86400)       # posted too old -> archived
     add("Applied Junk", 10, status="applied")             # tracked -> NEVER touched
@@ -199,9 +201,9 @@ def test_archive_backlog(tmp_path):
     assert statuses["Expired Good"] == "archived"
     assert statuses["Marginal Fresh"] == "new"
     assert statuses["Good Fresh"] == "new"
+    assert statuses["Thin Junk"] == "new"
     assert statuses["Applied Junk"] == "applied"
 
-    assert statuses["Thin Junk"] == "new"
 
 def test_archive_stale(tmp_path):
     conn = fresh(tmp_path)
@@ -235,3 +237,35 @@ def test_study_progress(tmp_path):
     assert db.study_progress_map(conn)["llm-serving"] >= first
     db.set_study_done(conn, "llm-serving", False)
     assert db.study_progress_map(conn) == {}
+
+
+def test_study_notes(tmp_path):
+    conn = fresh(tmp_path)
+    assert db.study_notes(conn, "rag") == []
+    nid = db.add_study_note(conn, "rag", "chunk by structure", prefix="so ",
+                            suffix=" first", note="quote this")
+    other = db.add_study_note(conn, "rag", "second quote")
+    db.add_study_note(conn, "sql", "index seek")
+    rows = db.study_notes(conn, "rag")
+    assert [r["id"] for r in rows] == [nid, other]
+    assert rows[0]["note"] == "quote this" and rows[0]["prefix"] == "so "
+    assert rows[1]["note"] == ""
+    assert db.study_note_counts(conn) == {"rag": 2, "sql": 1}
+    db.update_study_note(conn, nid, "revised")
+    assert db.study_notes(conn, "rag")[0]["note"] == "revised"
+    db.delete_study_note(conn, nid)
+    assert [r["id"] for r in db.study_notes(conn, "rag")] == [other]
+    with pytest.raises(ValueError):
+        db.add_study_note(conn, "rag", "   ")
+
+
+def test_study_notes_table_created_on_plain_connect(tmp_path):
+    """The dashboard opens with connect(), not init_db(): a DB from before the
+    notes table existed must still work."""
+    path = tmp_path / "old.db"
+    conn = db.connect(path)
+    conn.execute("CREATE TABLE study_progress (slug TEXT PRIMARY KEY, completed_at TEXT)")
+    conn.commit()
+    assert db.study_note_counts(conn) == {}
+    db.add_study_note(conn, "x", "y")
+    assert db.study_note_counts(conn) == {"x": 1}

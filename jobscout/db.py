@@ -101,6 +101,18 @@ CREATE TABLE IF NOT EXISTS study_progress (
     completed_at    TEXT
 );
 
+CREATE TABLE IF NOT EXISTS study_notes (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug            TEXT NOT NULL,
+    quote           TEXT NOT NULL,
+    prefix          TEXT DEFAULT '',
+    suffix          TEXT DEFAULT '',
+    note            TEXT DEFAULT '',
+    created_at      TEXT,
+    updated_at      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_study_notes_slug ON study_notes(slug);
+
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER);
 """
 
@@ -454,3 +466,66 @@ def study_progress_map(conn: sqlite3.Connection) -> dict:
     """slug -> completed_at (ISO)."""
     return {r["slug"]: r["completed_at"]
             for r in conn.execute("SELECT slug, completed_at FROM study_progress")}
+
+
+# ── study notes (highlights + comments on topic text) ───────────────
+# A highlight is anchored by its quoted text plus a little context on each
+# side, not by character offsets, so it survives the routine deepening the
+# topic file (paragraphs move; the sentence you marked usually does not).
+
+_STUDY_NOTES_DDL = """
+CREATE TABLE IF NOT EXISTS study_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT NOT NULL,
+    quote TEXT NOT NULL, prefix TEXT DEFAULT '', suffix TEXT DEFAULT '',
+    note TEXT DEFAULT '', created_at TEXT, updated_at TEXT);
+CREATE INDEX IF NOT EXISTS idx_study_notes_slug ON study_notes(slug);
+"""
+
+
+def ensure_study_notes(conn: sqlite3.Connection):
+    """The dashboard opens the DB with connect(), not init_db(), so a DB
+    created before this table existed gets it on first use."""
+    conn.executescript(_STUDY_NOTES_DDL)
+
+
+def add_study_note(conn: sqlite3.Connection, slug: str, quote: str,
+                   prefix: str = "", suffix: str = "", note: str = "") -> int:
+    quote = (quote or "").strip()
+    if not quote:
+        raise ValueError("a highlight needs some text")
+    ensure_study_notes(conn)
+    now = now_iso()
+    cur = conn.execute(
+        "INSERT INTO study_notes (slug, quote, prefix, suffix, note, created_at, "
+        "updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (slug, quote, prefix or "", suffix or "", note or "", now, now))
+    conn.commit()
+    return cur.lastrowid
+
+
+def update_study_note(conn: sqlite3.Connection, note_id: int, note: str):
+    ensure_study_notes(conn)
+    conn.execute("UPDATE study_notes SET note=?, updated_at=? WHERE id=?",
+                 (note or "", now_iso(), int(note_id)))
+    conn.commit()
+
+
+def delete_study_note(conn: sqlite3.Connection, note_id: int):
+    ensure_study_notes(conn)
+    conn.execute("DELETE FROM study_notes WHERE id=?", (int(note_id),))
+    conn.commit()
+
+
+def study_notes(conn: sqlite3.Connection, slug: str) -> list[dict]:
+    """Highlights for one topic, oldest first."""
+    ensure_study_notes(conn)
+    return [dict(r) for r in conn.execute(
+        "SELECT id, slug, quote, prefix, suffix, note, created_at, updated_at "
+        "FROM study_notes WHERE slug=? ORDER BY id", (slug,))]
+
+
+def study_note_counts(conn: sqlite3.Connection) -> dict:
+    """slug -> number of highlights (for the checklist)."""
+    ensure_study_notes(conn)
+    return {r["slug"]: r["c"] for r in conn.execute(
+        "SELECT slug, COUNT(*) c FROM study_notes GROUP BY slug")}

@@ -87,12 +87,68 @@ def test_abroad_market_filter(dash, server):
     dash.wait_for_timeout(1000)
 
 
-def test_topic_link_opens_focus_panel(page, server):
-    """?topic=<slug> links (rewritten from file links) open the study focus
-    panel on any tab (regression: raw file links were dead)."""
+def test_topic_link_opens_topic_page(page, server):
+    """?topic=<slug> (rewritten from file links) opens the topic's own page
+    from any tab: the article, a back link and the studied control, nothing
+    else from the Study page (regression: raw file links were dead)."""
     page.goto(server["url"] + "/?topic=demo-alpha-topic")
-    page.wait_for_selector("text=Study focus", timeout=30000)
-    assert page.locator("text=Demo Alpha Topic >> visible=true").count() >= 1
+    page.wait_for_selector("text=Back to Study", timeout=30000)
+    assert page.locator("#jsr-art h1", has_text="Demo Alpha Topic").count() == 1
+    assert page.locator("text=Mark as studied >> visible=true").count() >= 1
+    assert page.locator("text=Today's session >> visible=true").count() == 0
+    # sibling links written as bare "<slug>.md" inside a topic file used to
+    # 404 as /study/<slug>.md - now they route to the topic page
+    beta = page.locator("#jsr-art a", has_text="beta")
+    assert beta.get_attribute("href") == "study?topic=demo-beta-topic"
+    # a non-topic .md link is left as written
+    assert page.locator("#jsr-art a", has_text="notes").get_attribute("href") == "../session-notes.md"
+    beta.click()
+    page.wait_for_selector("#jsr-art h1:has-text('Demo Beta Topic')", timeout=30000)
+    assert "topic=demo-beta-topic" in page.url
+    assert page.locator("text=Page not found").count() == 0
+
+
+def test_topic_page_highlight_note_and_studied(page, server):
+    """Selecting text in the article offers Highlight; the highlight persists
+    to study_notes, re-renders as a <mark>, takes a note, and the page's
+    mark-as-studied button writes study_progress."""
+    goto_page(page, server, "/study?topic=demo-beta-topic")
+    page.wait_for_selector("#jsr-art h1", timeout=30000)
+    page.evaluate("""() => {
+        const art = document.querySelector('#jsr-art');
+        const tn = art.querySelector('p').firstChild;
+        const r = document.createRange(); r.setStart(tn, 0); r.setEnd(tn, 4);
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        art.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+    }""")
+    page.wait_for_selector("#jsr-bar:not([hidden])", timeout=5000)
+    page.locator("#jsr-bar [data-act=hl]").click()
+    page.wait_for_selector("mark.jsr-hl", timeout=15000)
+    assert page.locator("mark.jsr-hl").first.inner_text() == "test"
+    conn = db_conn(server)
+    row = conn.execute("SELECT quote, note FROM study_notes WHERE slug=?",
+                       ("demo-beta-topic",)).fetchone()
+    assert row is not None and row["quote"] == "test" and row["note"] == ""
+    # click the highlight -> note popover -> save
+    page.locator("mark.jsr-hl").first.click()
+    page.wait_for_selector("#jsr-pop:not([hidden])", timeout=5000)
+    page.locator("#jsr-pop-text").fill("remember this")
+    page.locator("#jsr-pop [data-act=save]").click()
+    page.wait_for_selector("mark.jsr-hl.jsr-noted", timeout=15000)
+    assert page.locator("text=remember this >> visible=true").count() >= 1
+    assert conn.execute("SELECT note FROM study_notes WHERE slug=?",
+                        ("demo-beta-topic",)).fetchone()["note"] == "remember this"
+    # mark studied from the bottom of the article
+    page.locator("button", has_text="Mark as studied").first.click()
+    page.wait_for_selector("text=Mark as not studied", timeout=15000)
+    assert conn.execute("SELECT completed_at FROM study_progress WHERE slug=?",
+                        ("demo-beta-topic",)).fetchone()["completed_at"]
+    # clean up so the checklist test still starts at 0/2
+    page.locator("button", has_text="Mark as not studied").first.click()
+    page.wait_for_selector("text=Mark as studied", timeout=15000)
+    conn.execute("DELETE FROM study_notes WHERE slug=?", ("demo-beta-topic",))
+    conn.commit()
+    conn.close()
 
 
 def test_brief_actions_apply_from_today_page(page, server):
@@ -150,6 +206,9 @@ def test_study_checklist_tracks_completion(dash, server):
     assert dash.locator("text=LEARN >> visible=true").count() >= 1
     assert dash.locator("text=Checklist >> visible=true").count() >= 1
     assert dash.locator("text=0/2 studied >> visible=true").count() >= 1
+    # every checklist row links to its topic page; no topic selectbox anymore
+    assert dash.locator("a[href='study?topic=demo-alpha-topic']").count() >= 1
+    assert dash.locator("text=Overview (STUDY.md)").count() == 0
     dash.locator("div[data-testid='stCheckbox']", has_text="Demo Alpha Topic").first.click()
     dash.wait_for_timeout(1500)
     assert dash.locator("text=1/2 studied >> visible=true").count() >= 1
