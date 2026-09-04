@@ -350,7 +350,11 @@ def archive_backlog(conn: sqlite3.Connection, *, junk_score: float = 20,
                     posted_days: int = 10, unseen_days: int = 7) -> int:
     """Keep the 'new' pool honest. Archives (never deletes - deletion would
     let the same listing re-enter as new on the next fetch):
-      - junk:    score < junk_score (will never surface)
+      - junk:    score < junk_score (will never surface) - but only once the
+                 row has a real description. A thin stage-1 card carries a
+                 title-only provisional score and must be enriched first,
+                 otherwise a title the patterns miss ("Back End Developer")
+                 is archived minutes after ingestion, unread.
       - stale-low: score < low_score and posted > low_days ago
       - expired: posted > posted_days ago, or not seen in any feed for
                  unseen_days (likely filled/delisted)
@@ -361,7 +365,7 @@ def archive_backlog(conn: sqlite3.Connection, *, junk_score: float = 20,
     cur = conn.execute(
         """UPDATE jobs SET status='archived', status_updated_at=?
            WHERE status='new' AND (
-              score < ?
+              (score < ? AND COALESCE(needs_detail, 0) = 0)
               OR (score < ? AND posted_at_epoch IS NOT NULL AND posted_at_epoch < ?)
               OR (posted_at_epoch IS NOT NULL AND posted_at_epoch < ?)
               OR fetched_at < datetime('now', ?)

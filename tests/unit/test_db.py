@@ -173,10 +173,13 @@ def test_archive_backlog(tmp_path):
     conn = fresh(tmp_path)
     now = int(time.time())
 
-    def add(title, score, epoch=None, status="new"):
+    def add(title, score, epoch=None, status="new", thin=False):
+        # a real JD by default: a description-less (thin) card carries only a
+        # title-derived provisional score and must survive until enriched
         db.upsert(conn, make_job(title=title, url=f"https://x/{title}",
                                  extra={"posted_at_epoch": epoch or now - 3600}),
                   score, [])
+                                 description="" if thin else "x" * 400,
         if status != "new":
             jid = db.job_id("Acme", title, "Bangalore")
             db.set_status(conn, jid, status)
@@ -184,6 +187,7 @@ def test_archive_backlog(tmp_path):
     add("Junk Role", 10)                                  # junk -> archived
     add("Marginal Old", 30, epoch=now - 6 * 86400)        # low+old -> archived
     add("Marginal Fresh", 30)                             # low but fresh -> kept
+    add("Thin Junk", 10, thin=True)                       # unread card -> kept
     add("Good Fresh", 80)                                 # kept
     add("Expired Good", 80, epoch=now - 12 * 86400)       # posted too old -> archived
     add("Applied Junk", 10, status="applied")             # tracked -> NEVER touched
@@ -197,6 +201,7 @@ def test_archive_backlog(tmp_path):
     assert statuses["Good Fresh"] == "new"
     assert statuses["Applied Junk"] == "applied"
 
+    assert statuses["Thin Junk"] == "new"
 
 def test_archive_stale(tmp_path):
     conn = fresh(tmp_path)
