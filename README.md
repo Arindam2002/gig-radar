@@ -134,6 +134,14 @@ the studying itself is curated from your actual pipeline. Setup is a
 copy-paste prompt and a one-file skill install, see
 [claude-extras/README.md](claude-extras/README.md).
 
+Topics you have actually reviewed can go out as a knowledge base: tick
+"Publish this version" on a topic page and `python -m jobscout.publish export`
+writes it, its links, its flashcards and its diagram into a static archive
+site built with [Quartz](https://quartz.jzhao.xyz/). Technical topics only,
+and version-scoped, so a topic the routine deepened after you reviewed it is
+held back until you read it again. Unticking deletes the page from the site
+on the next export.
+
 ## Config
 
 | File | What it controls |

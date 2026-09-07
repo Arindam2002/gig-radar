@@ -165,6 +165,45 @@ def test_topic_page_deck(page, server):
     assert page.locator("text=Flashcards").count() == 0
 
 
+def test_publish_toggle(page, server):
+    """"Publish this version" writes the hash of the file you just read into
+    study_publish, and unticking clears the row.
+
+    The hash, not the slug, is the thing being stored: the exporter compares
+    it with the file on disk and holds the topic back when the routine has
+    deepened it since. Asserting the exact sha256 here is what makes that
+    comparison meaningful rather than a formality.
+
+    Only the technical half of the control is covered. The disabled resume
+    variant needs a third fixture topic, and this suite has three assertions
+    that count the fixture topics exactly (the checklist's "0/2 studied" and
+    two map tests asserting two nodes), so adding one would break them.
+    """
+    from jobscout import publish
+
+    topic_file = (Path(server["db_path"]).parent / "study" / "topics"
+                  / "demo-alpha-topic.md")
+    goto_page(page, server, "/study?topic=demo-alpha-topic")
+    page.wait_for_selector("#jsr-art h1", timeout=30000)
+    assert page.locator("text=Publish this version >> visible=true").count() >= 1
+
+    page.locator("div[data-testid='stCheckbox']",
+                 has_text="Publish this version").first.click()
+    page.wait_for_selector("text=This version is approved", timeout=15000)
+    conn = db_conn(server)
+    row = conn.execute("SELECT reviewed_at, content_hash FROM study_publish "
+                       "WHERE slug=?", ("demo-alpha-topic",)).fetchone()
+    assert row is not None and row["reviewed_at"]
+    assert row["content_hash"] == publish.content_hash(topic_file.read_text())
+
+    page.locator("div[data-testid='stCheckbox']",
+                 has_text="Publish this version").first.click()
+    page.wait_for_selector("text=Off by default", timeout=15000)
+    assert conn.execute("SELECT slug FROM study_publish WHERE slug=?",
+                        ("demo-alpha-topic",)).fetchone() is None
+    conn.close()
+
+
 def test_topic_page_highlight_note_and_studied(page, server):
     """Selecting text in the article offers Highlight; the highlight persists
     to study_notes, re-renders as a <mark>, takes a note, and the page's

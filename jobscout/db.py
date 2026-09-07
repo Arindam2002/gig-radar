@@ -113,6 +113,12 @@ CREATE TABLE IF NOT EXISTS study_notes (
 );
 CREATE INDEX IF NOT EXISTS idx_study_notes_slug ON study_notes(slug);
 
+CREATE TABLE IF NOT EXISTS study_publish (
+    slug            TEXT PRIMARY KEY,
+    reviewed_at     TEXT,
+    content_hash    TEXT
+);
+
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER);
 """
 
@@ -529,3 +535,49 @@ def study_note_counts(conn: sqlite3.Connection) -> dict:
     ensure_study_notes(conn)
     return {r["slug"]: r["c"] for r in conn.execute(
         "SELECT slug, COUNT(*) c FROM study_notes GROUP BY slug")}
+
+
+# ── study publishing (which version of a topic you approved) ────────
+# One row per topic you have read and chosen to put on the archive site,
+# carrying the sha256 of the file text as it stood when you approved it.
+# The routine rewrites topic files daily, so "publish this topic" is not a
+# durable statement; "publish this version" is. jobscout.publish refuses to
+# export a topic whose file has moved since, and that is the whole guarantee.
+
+_STUDY_PUBLISH_DDL = """
+CREATE TABLE IF NOT EXISTS study_publish (
+    slug TEXT PRIMARY KEY, reviewed_at TEXT, content_hash TEXT);
+"""
+
+
+def ensure_study_publish(conn: sqlite3.Connection):
+    """The dashboard opens the DB with connect(), not init_db(), so a DB
+    created before this table existed gets it on first use."""
+    conn.executescript(_STUDY_PUBLISH_DDL)
+
+
+def set_publish(conn: sqlite3.Connection, slug: str, content_hash: str):
+    """Approve this exact version of the topic for the archive site."""
+    ensure_study_publish(conn)
+    conn.execute(
+        "INSERT INTO study_publish (slug, reviewed_at, content_hash) "
+        "VALUES (?, ?, ?) ON CONFLICT(slug) DO UPDATE SET "
+        "reviewed_at=excluded.reviewed_at, content_hash=excluded.content_hash",
+        (slug, now_iso(), content_hash or ""))
+    conn.commit()
+
+
+def clear_publish(conn: sqlite3.Connection, slug: str):
+    """Unpublish. The next export deletes the page from the archive site."""
+    ensure_study_publish(conn)
+    conn.execute("DELETE FROM study_publish WHERE slug=?", (slug,))
+    conn.commit()
+
+
+def publish_map(conn: sqlite3.Connection) -> dict:
+    """slug -> {"reviewed_at": ..., "content_hash": ...} for each approved topic."""
+    ensure_study_publish(conn)
+    return {r["slug"]: {"reviewed_at": r["reviewed_at"],
+                        "content_hash": r["content_hash"]}
+            for r in conn.execute(
+                "SELECT slug, reviewed_at, content_hash FROM study_publish")}

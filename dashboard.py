@@ -27,6 +27,7 @@ from jobscout import db  # noqa: E402
 from jobscout import graph  # noqa: E402
 from jobscout import mapview  # noqa: E402
 from jobscout import outreach  # noqa: E402
+from jobscout import publish  # noqa: E402
 from jobscout import reader  # noqa: E402
 from jobscout.normalize import salary_display  # noqa: E402
 
@@ -361,6 +362,72 @@ def _diagram(slug: str):
                        f"(open it at excalidraw.com, then re-export)")
 
 
+def _publish_control(slug: str, f: Path):
+    """"Publish this version" for the archive site, next to "Mark as studied".
+
+    The flag records the sha256 of the file you have just read, not the fact
+    that you liked the topic: the daily routine rewrites these files, so an
+    approval that outlived its version would publish prose nobody read. When
+    the file has moved since, the toggle stays on but the export holds the
+    topic back, and this says so and offers the one-click re-approval.
+
+    Resume drills get the control disabled rather than hidden, because the
+    reason they can never be published is worth reading once.
+    """
+    try:
+        text = f.read_text()
+    except OSError:
+        return
+    meta, _ = graph.split_frontmatter(text)
+    track = graph.track_of(slug, meta)
+    key = f"publish_{slug}"
+    row = db.publish_map(conn).get(slug)
+
+    c1, c2 = st.columns([1.4, 3], vertical_alignment="center")
+    if track == "resume":
+        c1.toggle("Publish this version", value=False, disabled=True, key=key,
+                  help="Resume drills are never published: they quote your own "
+                       "claims back at you and belong to you alone.")
+        c2.caption("Resume drills stay private. The exporter excludes them by "
+                   "track and refuses any page that links to one.")
+        return
+
+    def on_toggle():
+        # Widget callbacks can run on a different thread than the one that
+        # opened the module-level connection, and sqlite objects are bound to
+        # their thread - same reason on_action opens its own (see below).
+        c = get_conn()
+        try:
+            if st.session_state.get(key):
+                db.set_publish(c, slug, publish.content_hash(f.read_text()))
+            else:
+                db.clear_publish(c, slug)
+        except OSError:
+            pass
+        finally:
+            c.close()
+
+    c1.toggle("Publish this version", value=bool(row), key=key,
+              on_change=on_toggle,
+              help="Exports this exact version to the archive site on the next "
+                   "`python -m jobscout.publish export`.")
+    if not row:
+        c2.caption("Off by default. Nothing leaves the study folder until you "
+                   "have read a version and ticked it.")
+    elif row.get("content_hash") != publish.content_hash(text):
+        c2.caption(":orange[⚠ the published version differs from the current "
+                   "file] - the routine has deepened this topic since you "
+                   "reviewed it, so the export is holding it back.")
+        if c2.button("Re-review and publish this version",
+                     key=f"republish_{slug}"):
+            db.set_publish(conn, slug, publish.content_hash(text))
+            st.toast("This version is now the published one", icon="✅")
+            st.rerun()
+    else:
+        c2.caption("This version is approved. The next export publishes it; "
+                   "unticking deletes it from the site.")
+
+
 def _flashcards(slug: str):
     """The topic's deck, between the Related strip and the article: every
     question visible, every answer folded away until you have had a go at it.
@@ -510,6 +577,7 @@ def topic_article() -> bool:
             st.rerun()
         b2.caption("Once ticked, the daily routine may deepen this topic and its "
                    "spaced-repetition cycle (1, 3, 7, 21 days) starts.")
+    _publish_control(slug, f)
     return True
 
 
