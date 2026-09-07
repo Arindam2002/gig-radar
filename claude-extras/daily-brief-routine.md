@@ -95,6 +95,20 @@ Read STUDY.md first.
      next time" questions, add 1-2 harder Q&As, refresh "Deepen next time".
      Never duplicate; deepen. Keep the frontmatter block, set `updated` to
      today, and leave `created` alone.
+   - **Every technical topic carries a flashcard deck** in a sidecar file at
+     study/cards/<slug>.md, never inside the topic file. A NEW topic gets a
+     deck of 6 to 10 cards written the same day; a REVISION adds 1 or 2 cards
+     for the new material ONLY and never rewrites or reorders the cards that
+     are already there (the reader shuffles them, the user is learning them).
+     One fact per card, answers under 40 words, questions phrased the way an
+     interviewer would ask them out loud. The shape is exact, because a
+     parser reads it:
+     ```
+     - Q: What does a token bucket bound?
+       A: Burst (capacity b) and sustained rate (r/sec); both are the SLO knobs.
+     ```
+     A "- Q:" line opens a card, the indented "A:" line answers it, and an
+     answer may run on over further indented lines. Resume drills get no deck.
    - **Link as you write.** When a deepened answer leans on another topic,
      do BOTH: add that slug to `related` (if it is not already there), and
      put an inline `[text](<slug>.md)` link in the answer text itself where

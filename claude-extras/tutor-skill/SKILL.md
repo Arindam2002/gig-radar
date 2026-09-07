@@ -22,16 +22,22 @@ see "Python coding" below.
 2. For each topic, read its file in `topics/` and run this loop:
    a. **Frame** (~3 sentences): what the concept is and why their target
       companies ask about it.
-   b. **Quiz FIRST**: ask the file's Q&A questions ONE at a time. Wait for their
+   b. **Flashcards** (skip when there is no deck): if `study/cards/<slug>.md`
+      exists, open with 3 cards from it as a warm-up. Ask the card's question,
+      wait for their answer, then show the card's answer and compare the two in
+      a sentence. Pick the 3 by what they have struggled with before, else the
+      first three. The deck is read-only here: the daily routine writes it, the
+      tutor never edits it.
+   c. **Quiz FIRST**: ask the file's Q&A questions ONE at a time. Wait for their
       answer. Grade it honestly (what was right, what was missing), THEN give
       the model answer from the file, expanded where useful. Never dump answers
       before they attempt.
-   c. **Draw the mental model**: render the file's "Mental model" section as a
+   d. **Draw the mental model**: render the file's "Mental model" section as a
       diagram - use the Excalidraw MCP tool if connected, otherwise a mermaid
       diagram, otherwise ASCII. Walk through it.
-   d. **Code it in Python** - whenever the topic is code-shaped (see "Python
+   e. **Code it in Python** - whenever the topic is code-shaped (see "Python
       coding" below). Do this before the stretch question.
-   e. **Stretch**: ask one "Deepen next time" question as a bonus. If they
+   f. **Stretch**: ask one "Deepen next time" question as a bonus. If they
       struggle, teach it - that's the point of the section.
 3. **Resume drills** (`resume-*` files): switch to interviewer role-play. Ask the
    "Interviewer probes" one at a time, in a skeptical-but-fair interviewer voice.
