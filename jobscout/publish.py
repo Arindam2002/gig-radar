@@ -263,7 +263,9 @@ def render(study_dir: Path, slug: str, text: str, export_set: set,
 
     parts = [_frontmatter(title, tags, meta.get("updated"))]
     if diagram_path(study_dir, slug).exists():
-        parts.append(f"\n![Overview](diagrams/{slug}.svg)\n")
+        # bare filename on purpose: Quartz resolves links by shortest unique
+        # path, and "diagrams/<slug>.svg" would fall back to the site root
+        parts.append(f"\n![Overview]({slug}.svg)\n")
     parts.append("\n" + body.strip() + "\n")
     for section in (_related_section(meta, slug, export_set, titles),
                     _flashcards_section(cards.load(study_dir, slug))):

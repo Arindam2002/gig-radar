@@ -160,7 +160,7 @@ def test_d1_appends_the_deck_as_callouts_and_omits_it_when_there_is_none(d1, out
 
 def test_d1_copies_and_embeds_the_diagram(d1, out):
     alpha = (out / "publish-alpha.md").read_text()
-    assert "![Overview](diagrams/publish-alpha.svg)" in alpha
+    assert "![Overview](publish-alpha.svg)" in alpha
     # right after the frontmatter, before any prose
     assert alpha.split("---\n")[2].lstrip().startswith("![Overview]")
     assert (out / "diagrams" / "publish-alpha.svg").is_file()
