@@ -111,6 +111,17 @@ def server(tmp_path_factory):
         "\n"
         "- Q: Where does a deck live?\n"
         "  A: Alphacardanswertwo, a sidecar file, never the article body.\n")
+    # Alpha carries an overview diagram, beta carries none, so the topic page
+    # has both the "illustrated" and the "not illustrated" case. The SVG is a
+    # tiny hand-written stand-in for a real Excalidraw export - the page only
+    # cares that the file is there.
+    (study / "diagrams").mkdir()
+    (study / "diagrams" / "demo-alpha-topic.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" '
+        'width="200" height="80"><rect x="0" y="0" width="200" height="80" '
+        'fill="#ffffff"/><rect x="10" y="15" width="80" height="50" '
+        'fill="#a5d8ff" stroke="#1e1e1e"/><text x="20" y="45" font-size="16">'
+        'Alphadiagrambox</text></svg>')
     briefs = root / "briefs"
     briefs.mkdir()
     (briefs / "TODAY.md").write_text(

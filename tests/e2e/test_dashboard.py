@@ -389,6 +389,34 @@ def _map_nodes(page):
     return sorted(got)
 
 
+# ── the topic-page overview diagram (WS-C2) ─────────────────────────
+
+def test_topic_page_diagram(page, server):
+    """A topic with study/diagrams/<slug>.svg shows it above the deck, as the
+    first thing on the page after the Related strip; a topic without one shows
+    no image at all rather than an empty frame."""
+    goto_page(page, server, "/study?topic=demo-alpha-topic")
+    page.wait_for_selector("text=Overview", timeout=30000)
+
+    image = page.locator("[data-testid='stImage'] img, img[src*='.svg']").first
+    image.wait_for(timeout=15000)
+    assert image.is_visible()
+
+    # the picture comes before the deck, not after it
+    deck = page.get_by_text("Flashcards", exact=False).first
+    assert image.bounding_box()["y"] < deck.bounding_box()["y"]
+
+    # the editable scene has not been written for this fixture, so the page
+    # offers the picture without claiming there is a source next to it
+    assert page.locator("text=Editable source").count() == 0
+
+    # beta has no svg, so its page carries no diagram at all
+    goto_page(page, server, "/study?topic=demo-beta-topic")
+    page.wait_for_selector("#jsr-art h1", timeout=30000)
+    assert page.locator("text=Overview").count() == 0
+    assert page.locator("[data-testid='stImage']").count() == 0
+
+
 def test_map_renders_and_navigates(page, server):
     """/map draws one node per topic and a line for the alpha->beta edge;
     clicking a node opens that topic's page."""

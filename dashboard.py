@@ -337,6 +337,30 @@ def _back_to_study():
                 unsafe_allow_html=True)
 
 
+def _diagram(slug: str):
+    """The topic's overview illustration, above the deck: one picture of the
+    mental model before any words.
+
+    The picture is `study/diagrams/<slug>.svg`, exported from the Excalidraw
+    scene next to it (see tools/README.md). The scene is the source you edit;
+    the SVG is what every surface embeds. A topic without one renders nothing
+    at all - no placeholder, no empty box - because most topics will not have
+    a diagram for a while and an empty frame on every page is worse than no
+    frame.
+    """
+    svg = study_dir() / "diagrams" / f"{slug}.svg"
+    if not svg.exists():
+        return
+    with st.container(border=True):
+        st.markdown('<div class="page-sub" style="margin:.1rem 0 .3rem 0">'
+                    '🖼 Overview</div>', unsafe_allow_html=True)
+        st.image(str(svg), width="stretch")
+        source = svg.with_suffix(".excalidraw")
+        if source.exists():
+            st.caption(f"Editable source: `study/diagrams/{source.name}` "
+                       f"(open it at excalidraw.com, then re-export)")
+
+
 def _flashcards(slug: str):
     """The topic's deck, between the Related strip and the article: every
     question visible, every answer folded away until you have had a go at it.
@@ -434,6 +458,7 @@ def topic_article() -> bool:
                     f'style="margin:.1rem 0 .7rem 0">Related: {links}</div>',
                     unsafe_allow_html=True)
 
+    _diagram(slug)
     _flashcards(slug)
 
     focus = st.session_state.pop("_reader_focus", None)

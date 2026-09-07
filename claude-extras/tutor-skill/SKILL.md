@@ -32,9 +32,13 @@ see "Python coding" below.
       answer. Grade it honestly (what was right, what was missing), THEN give
       the model answer from the file, expanded where useful. Never dump answers
       before they attempt.
-   d. **Draw the mental model**: render the file's "Mental model" section as a
-      diagram - use the Excalidraw MCP tool if connected, otherwise a mermaid
-      diagram, otherwise ASCII. Walk through it.
+   d. **Draw the mental model**: if `study/diagrams/<slug>.svg` already exists,
+      do not redraw it - show that file (or name its path so they can open it)
+      and walk through it. The picture is the one they will see on the topic
+      page and in the archive, so the session and the page should agree. Only
+      when there is no SVG, render the file's "Mental model" section yourself:
+      the Excalidraw MCP tool if connected, otherwise a mermaid diagram,
+      otherwise ASCII. Either way, walk through it.
    e. **Code it in Python** - whenever the topic is code-shaped (see "Python
       coding" below). Do this before the stretch question.
    f. **Stretch**: ask one "Deepen next time" question as a bonus. If they
