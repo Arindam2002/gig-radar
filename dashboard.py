@@ -1344,10 +1344,12 @@ def page_map():
     key = "study_map"
     pins = getattr(st.session_state.get(key), "pins", None) or {}
     mapview.study_map(view, pins=pins, key=key)
-    st.caption("Click a node to open the topic. Drag one to pin it where you "
-               "want it; pins survive reruns. A solid ring means studied, a "
-               "dashed outline means it is still waiting on you, and the badge "
-               "counts your notes.")
+    st.caption("The map drifts on its own. Hover a node to light up what it "
+               "connects to, click to open the topic, drag one around and its "
+               "neighbours follow; letting go pins it (pins survive reruns) "
+               "and a double-click sets it loose again. A solid ring means "
+               "studied, a dashed outline means it is still waiting on you, "
+               "and the badge counts your notes.")
 
 
 # ── navigation ──────────────────────────────────────────────────────

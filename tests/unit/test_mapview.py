@@ -158,3 +158,35 @@ def test_component_strings_reference_no_external_resource():
     blob = mapview._HTML + mapview._CSS + mapview._JS
     for needle in ("https://", "http://", "//cdn", "fetch(", "import("):
         assert needle not in blob, needle
+
+
+# ── the live loop's house rules, as far as Python can see them ──────
+# The simulation itself is e2e territory. What is worth pinning down here is
+# the handful of promises that are easy to delete by accident in a refactor
+# and expensive to notice in a browser: a frame loop that is never cancelled
+# leaks one animation per rerun, and one that ignores the OS motion setting
+# is a bug you only hear about from someone it hurts.
+
+def test_the_frame_loop_is_cancelled_and_paused():
+    js = mapview._JS
+    assert "requestAnimationFrame" in js
+    assert "cancelAnimationFrame" in js, "the frame loop must be cancellable"
+    assert "document.hidden" in js, "a hidden tab must not be simulated"
+    assert "visibilitychange" in js
+    # the cleanup function the component returns is what Streamlit calls on
+    # unmount; it has to take the listeners with it
+    tail = js[js.rindex("return () => {"):]
+    for gone in ("stop()", "removeEventListener"):
+        assert gone in tail, gone
+
+
+def test_reduced_motion_is_respected():
+    assert "(prefers-reduced-motion: reduce)" in mapview._JS
+    assert "prefers-reduced-motion: reduce" in mapview._CSS
+
+
+def test_the_settled_layout_is_published_separately_from_the_live_one():
+    """`cx`/`cy` drift; `data-x0`/`data-y0` are the layout of record, which
+    is what the e2e tests measure and what the drawing is framed around."""
+    assert '"data-x0": S[i].x' in mapview._JS
+    assert '"data-y0": S[i].y' in mapview._JS

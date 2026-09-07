@@ -452,11 +452,17 @@ for i in range(300):
 # whether the picture is the same one after a rerun.
 
 def _map_nodes(page):
-    """[(slug, cx, cy, r), ...] for every node the map drew, sorted."""
+    """[(slug, x0, y0, r), ...] for every node the map drew, sorted.
+
+    `data-x0`/`data-y0` are the settled layout of record: solved once before
+    the first paint and never rewritten. The live `cx`/`cy` drift a couple of
+    pixels every frame, which is the whole point of the map, so they are no
+    use for asking where a topic lives.
+    """
     got = page.eval_on_selector_all(
         "circle.jsm-node",
-        """els => els.map(e => [e.dataset.slug, +e.getAttribute('cx'),
-                                +e.getAttribute('cy'), +e.getAttribute('r')])""")
+        """els => els.map(e => [e.dataset.slug, +e.dataset.x0,
+                                +e.dataset.y0, +e.getAttribute('r')])""")
     return sorted(got)
 
 
@@ -496,7 +502,16 @@ def test_map_renders_and_navigates(page, server):
     assert page.locator("circle.jsm-node").count() == 2      # the two fixtures
     assert page.locator("line.jsm-edge").count() >= 1        # alpha -> beta
     assert page.locator("text=2 topics >> visible=true").count() >= 1
-    page.locator("circle.jsm-node[data-slug='demo-alpha-topic']").click()
+    # Nothing on this canvas holds still, and Playwright's built-in click
+    # refuses a target whose box changed since the last frame - a bar no live
+    # simulation can clear. Hovering first is what the component itself asks
+    # for: the node under the pointer stops drifting, and the click then
+    # lands as a real one, hit-testing included, rather than as force=True.
+    box = page.locator("circle.jsm-node[data-slug='demo-alpha-topic']").bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.wait_for_timeout(400)
+    box = page.locator("circle.jsm-node[data-slug='demo-alpha-topic']").bounding_box()
+    page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
     page.wait_for_url(re.compile(r"topic=demo-alpha-topic"), timeout=30000)
     page.wait_for_selector("#jsr-art h1", timeout=30000)
     assert "topic=demo-alpha-topic" in page.url
@@ -519,9 +534,15 @@ def test_map_track_filter(page, server):
 
 
 def test_map_layout_is_deterministic(page, server):
-    """Streamlit reruns the whole script on every interaction: the layout is
-    seeded from the node set, so the same topics must land in the same place
-    rather than jumping under the cursor."""
+    """Streamlit reruns the whole script on every interaction: the settled
+    layout is seeded from the node set, so the same topics must land in the
+    same place rather than jumping under the cursor.
+
+    The live coordinates are the opposite promise. They are supposed to move,
+    every frame, for as long as the page is open - unless the reader has told
+    the OS they would rather things held still.
+    """
+    live = """els => els.map(e => [e.dataset.slug, +e.getAttribute('cx')])"""
     goto_page(page, server, "/map")
     page.wait_for_selector("circle.jsm-node", timeout=30000)
     before = _map_nodes(page)
@@ -534,6 +555,24 @@ def test_map_layout_is_deterministic(page, server):
     assert [n[0] for n in after] == [n[0] for n in before]
     for (slug, x1, y1, _), (_, x2, y2, _) in zip(before, after):
         assert abs(x1 - x2) <= 1 and abs(y1 - y2) <= 1, f"{slug} moved"
+
+    # the simulation is still running: two samples 700ms apart differ. The
+    # drift is only a few pixels wide and slow, so the bar is deliberately
+    # low - "not frozen" is the claim, not "visibly swinging".
+    a = dict(page.eval_on_selector_all("circle.jsm-node", live))
+    page.wait_for_timeout(700)
+    b = dict(page.eval_on_selector_all("circle.jsm-node", live))
+    assert max(abs(b[s] - a[s]) for s in a) > 0.05, "the map stopped moving"
+
+    # ...and it is not running for a reader who asked for less motion
+    page.emulate_media(reduced_motion="reduce")
+    goto_page(page, server, "/map")
+    page.wait_for_selector("circle.jsm-node", timeout=30000)
+    page.wait_for_timeout(2500)
+    a = dict(page.eval_on_selector_all("circle.jsm-node", live))
+    page.wait_for_timeout(700)
+    assert dict(page.eval_on_selector_all("circle.jsm-node", live)) == a, \
+        "reduced motion should paint once and stop"
 
 
 def test_map_has_no_external_resources(page, server):
@@ -550,7 +589,12 @@ def test_map_has_no_external_resources(page, server):
 
 
 def test_map_nodes_do_not_overlap(page, server):
-    """Two circles on top of each other are two topics you cannot click."""
+    """Two circles on top of each other are two topics you cannot click.
+
+    Judged on the settled layout, which is where the separation pass runs and
+    what the drawing is framed around; the live drift is a couple of pixels
+    of breathing on top of a gap the solver already opened.
+    """
     import math
 
     import pytest
