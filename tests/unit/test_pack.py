@@ -178,6 +178,14 @@ def test_header_names_track_slug_and_privacy(tmp_path):
     assert md.startswith("# DSA: widget search\n")
     assert f"track: dsa · slug: {WIDGET} · generated: " in md
     assert pack.REMINDER in md
+    # the header prints the title, so the body's own H1 is not repeated
+    assert md.count("# DSA: widget search") == 1
+    assert md.splitlines()[6] == "## Concept"
+
+
+def test_strip_leading_h1_leaves_bodies_without_one_alone(tmp_path):
+    assert pack.strip_leading_h1("# Title\n\n## Concept\nx") == "## Concept\nx"
+    assert pack.strip_leading_h1("## Concept\nx") == "## Concept\nx"
 
 
 def test_write_pack_creates_packs_dir(tmp_path):

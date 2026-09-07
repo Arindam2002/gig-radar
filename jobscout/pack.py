@@ -95,6 +95,15 @@ def title_for(slug: str, body: str) -> str:
     return slug.replace("-", " ").title()
 
 
+def strip_leading_h1(body: str) -> str:
+    """Drop the topic's own H1 when the pack header already printed it, so
+    the title does not appear twice at the top of the file."""
+    m = _H1.match(body.lstrip())
+    if not m:
+        return body
+    return body.lstrip()[m.end():].lstrip("\r\n")
+
+
 def _norm(text: str) -> str:
     return _WS.sub(" ", text or "").strip()
 
@@ -189,7 +198,7 @@ def build_pack(study_dir: Path, conn, slug: str) -> str:
         "",
         REMINDER,
         "",
-        body,
+        strip_leading_h1(body),
         "",
     ]
 
