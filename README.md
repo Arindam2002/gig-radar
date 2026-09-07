@@ -85,6 +85,10 @@ plus a `FIRECRAWL_API_KEY`.
                  notes on it, and mark the topic studied
 ```
 
+If you want to write something up from a topic, `python -m jobscout.pack <slug>`
+gathers the topic, its flashcards, its diagram, your highlights and any session
+notes that mention it into a single private markdown file under `study/packs/`.
+
 Design choices worth knowing: nothing gets deleted, only archived (deleted
 rows would just sneak back in as "new" on the next fetch). Every status change
 is recorded forever, which powers the calendar. Scraping is deliberately
