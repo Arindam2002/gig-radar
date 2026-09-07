@@ -99,6 +99,18 @@ def server(tmp_path_factory):
         "---\ntrack: llm-infra\ntags: []\nrelated: []\n"
         "created: 2026-01-01\nupdated: 2026-01-02\n---\n"
         "# Demo Beta Topic\n\n## Concept\ntest\n")
+    # Alpha carries a two-card sidecar deck; beta carries none, so the topic
+    # page has both the "deck" and the "no deck" case. The answers use
+    # nonsense single words so a visibility assertion can never be satisfied
+    # by prose elsewhere on the page.
+    (study / "cards").mkdir()
+    (study / "cards" / "demo-alpha-topic.md").write_text(
+        "# Demo Alpha Topic - cards\n\n"
+        "- Q: What does the alpha fixture deck prove?\n"
+        "  A: Alphacardanswerone, folded away until you open the card.\n"
+        "\n"
+        "- Q: Where does a deck live?\n"
+        "  A: Alphacardanswertwo, a sidecar file, never the article body.\n")
     briefs = root / "briefs"
     briefs.mkdir()
     (briefs / "TODAY.md").write_text(

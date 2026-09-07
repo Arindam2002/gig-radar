@@ -135,6 +135,36 @@ def test_topic_page_related_strip(page, server):
     assert back.locator("a[href='study?topic=demo-alpha-topic']").count() == 1
 
 
+def test_topic_page_deck(page, server):
+    """The sidecar deck renders once, above the article, with its answers
+    folded: every question appears exactly once in the DOM (the article body
+    never carries a deck, so nothing renders twice), an answer is hidden
+    until its card is opened, and a topic without a deck shows no deck."""
+    goto_page(page, server, "/study?topic=demo-alpha-topic")
+    page.wait_for_selector("text=Flashcards", timeout=30000)
+    q1 = "What does the alpha fixture deck prove?"
+    q2 = "Where does a deck live?"
+    assert page.locator(f"text={q1}").count() == 1
+    assert page.locator(f"text={q2}").count() == 1
+
+    answer = page.locator("text=Alphacardanswerone").first
+    assert not answer.is_visible()               # folded until you have a go
+    page.get_by_text(q1, exact=True).click()
+    page.wait_for_timeout(800)
+    assert answer.is_visible()
+
+    # shuffling reseeds the order; the deck is still the same two cards
+    page.locator("button", has_text="Shuffle").first.click()
+    page.wait_for_timeout(1500)
+    assert page.locator(f"text={q1}").count() == 1
+    assert page.locator(f"text={q2}").count() == 1
+
+    # beta has no sidecar file, so the page carries no deck at all
+    goto_page(page, server, "/study?topic=demo-beta-topic")
+    page.wait_for_selector("#jsr-art h1", timeout=30000)
+    assert page.locator("text=Flashcards").count() == 0
+
+
 def test_topic_page_highlight_note_and_studied(page, server):
     """Selecting text in the article offers Highlight; the highlight persists
     to study_notes, re-renders as a <mark>, takes a note, and the page's

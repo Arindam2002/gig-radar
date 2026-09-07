@@ -7,6 +7,7 @@ the full canvas, and controls live only on the page they affect.
 import html as html_mod
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -21,6 +22,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
+from jobscout import cards  # noqa: E402
 from jobscout import db  # noqa: E402
 from jobscout import graph  # noqa: E402
 from jobscout import outreach  # noqa: E402
@@ -334,6 +336,36 @@ def _back_to_study():
                 unsafe_allow_html=True)
 
 
+def _flashcards(slug: str):
+    """The topic's deck, between the Related strip and the article: every
+    question visible, every answer folded away until you have had a go at it.
+
+    The deck is a sidecar file (see jobscout.cards), so it appears here and
+    nowhere else on the page - the article body never contains one. Shuffle
+    stores a seed per topic in session state, which makes the order stable
+    across reruns and different only when you ask for a different order.
+    """
+    deck = cards.load(study_dir(), slug)
+    if not deck:
+        return
+    seed_key = f"deck_seed_{slug}"
+    seed = st.session_state.get(seed_key, 0)
+    order = list(range(len(deck)))
+    if seed:
+        random.Random(seed).shuffle(order)
+
+    head, shuffle = st.columns([4, 1], vertical_alignment="center")
+    head.markdown(f'<div class="page-sub" style="margin:.1rem 0 .2rem 0">'
+                  f'🃏 Flashcards · {len(deck)}</div>', unsafe_allow_html=True)
+    if shuffle.button("Shuffle", key=f"deck_shuffle_{slug}",
+                      help="Reorder the deck; answering out of order is the test"):
+        st.session_state[seed_key] = random.randrange(1, 1_000_000)
+        st.rerun()
+    for i in order:
+        with st.expander(deck[i]["q"]):
+            st.markdown(deck[i]["a"])
+
+
 def topic_article() -> bool:
     """?topic=<slug> turns any page into that topic's reading page: just the
     article, your highlights and notes, and the mark-as-studied control.
@@ -400,6 +432,8 @@ def topic_article() -> bool:
         st.markdown(f'<div class="topic-related page-sub" '
                     f'style="margin:.1rem 0 .7rem 0">Related: {links}</div>',
                     unsafe_allow_html=True)
+
+    _flashcards(slug)
 
     focus = st.session_state.pop("_reader_focus", None)
     reader.topic_reader(reader.topic_html(linkify_topics(f.read_text())), notes,
