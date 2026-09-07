@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 from jobscout import db  # noqa: E402
+from jobscout import graph  # noqa: E402
 from jobscout import outreach  # noqa: E402
 from jobscout import reader  # noqa: E402
 from jobscout.normalize import salary_display  # noqa: E402
@@ -305,9 +306,9 @@ def jobs_df(where: str = "1=1", params: tuple = ()) -> pd.DataFrame:
 # <slug>.md" from a brief, and bare "<slug>.md" between sibling topics. At
 # render time every shape becomes a study?topic=<slug> link to the topic page.
 # Links to .md files that are not topics (session-notes.md) are left alone.
-_TOPIC_MD_LINK = re.compile(
-    r"\[([^\]]+)\]\((?:\.\./)?(?:study/)?(?:topics/)?(?:\./)?"
-    r"([a-zA-Z0-9\-_]+)\.md(?:#[^)]*)?\)")
+# The graph reads the same shapes to build its edges, so there is one
+# pattern, and it lives with the graph.
+_TOPIC_MD_LINK = graph.TOPIC_MD_LINK
 
 
 def linkify_topics(md: str) -> str:
@@ -323,13 +324,9 @@ def linkify_topics(md: str) -> str:
 def _studied_at(completed_at: str | None, f: Path):
     """When the topic was ticked off, or None if never / if the file was
     deepened after that (a topic rewritten since you read it is due again)."""
-    if not completed_at:
+    if not graph.is_studied(completed_at, f):
         return None
-    try:
-        dt = datetime.fromisoformat(completed_at)
-    except ValueError:
-        return None
-    return dt if dt.timestamp() >= f.stat().st_mtime else None
+    return datetime.fromisoformat(completed_at)
 
 
 def _back_to_study():
@@ -391,6 +388,18 @@ def topic_article() -> bool:
     top2.markdown(f'<div class="page-sub" style="text-align:right; margin:0">'
                   f'{status} · {len(notes)} note{"s" if len(notes) != 1 else ""}</div>',
                   unsafe_allow_html=True)
+
+    # ── neighbourhood: where this topic sits in the study graph ──
+    # Both directions: what this topic points at, and what points back at
+    # it. A topic nobody links to is one you never stumble onto again.
+    rel = graph.neighbors(graph.build(study_dir(), conn), slug)
+    if rel:
+        links = " · ".join(
+            f'<a href="study?topic={n["slug"]}" target="_self">📖 {esc(n["title"])}</a>'
+            for n in rel)
+        st.markdown(f'<div class="topic-related page-sub" '
+                    f'style="margin:.1rem 0 .7rem 0">Related: {links}</div>',
+                    unsafe_allow_html=True)
 
     focus = st.session_state.pop("_reader_focus", None)
     reader.topic_reader(reader.topic_html(linkify_topics(f.read_text())), notes,
@@ -1041,6 +1050,12 @@ def page_tracker():
                 st.rerun()
 
 
+def _body(f: Path) -> str:
+    """A topic file's prose, with the frontmatter block left behind - the
+    worksheet quotes topics, and YAML is not a concept summary."""
+    return graph.split_frontmatter(f.read_text())[1]
+
+
 def _md_section(md: str, header: str) -> str:
     """Text under '## <header>' up to the next '## '."""
     m = re.search(rf"^##\s+{re.escape(header)}\s*$(.*?)(?=^##\s|\Z)",
@@ -1082,7 +1097,7 @@ def _todays_session(topic_files, studied):
     st.markdown("#### 🗓 Today's session")
     cols = st.columns(3, gap="medium")
     if dsa is not None:
-        md = dsa.read_text()
+        md = _body(dsa)
         links = re.findall(r"\[([^\]]+)\]\((https?://[^\)]+)\)",
                            _md_section(md, "Practice"))[:3]
         body = "<br>".join(f'<a href="{esc(u)}">{esc(t)}</a>' for t, u in links) \
@@ -1091,13 +1106,13 @@ def _todays_session(topic_files, studied):
     else:
         cols[0].caption("No DSA topic pending.")
     if tech is not None:
-        body = esc(_first_sentences(_md_section(tech.read_text(), "Concept")))
+        body = esc(_first_sentences(_md_section(_body(tech), "Concept")))
         _session_card(cols[1], "LEARN · one concept", tech, body)
     else:
         cols[1].caption("No tech topic pending.")
     if drill is not None:
         probes = re.findall(r"^\s*\d+\.\s+(.{10,140})",
-                            _md_section(drill.read_text(), "Interviewer probes"), re.M)[:2]
+                            _md_section(_body(drill), "Interviewer probes"), re.M)[:2]
         body = "<br>".join(f"· {esc(p)}" for p in probes) or "Cross-examination drill."
         _session_card(cols[2], "REHEARSE · resume drill", drill, body)
     else:

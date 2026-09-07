@@ -85,10 +85,18 @@ def server(tmp_path_factory):
     study = root / "study"
     (study / "topics").mkdir(parents=True)
     (study / "STUDY.md").write_text("# Study Base\n\ntest study base\n")
+    # Topic files carry a YAML frontmatter block (see jobscout.graph): alpha
+    # declares beta as related, beta declares nothing, so the Related strip
+    # has an outbound case and an inbound one. The inline links stay: they
+    # are what the link-rewriting tests assert on.
     (study / "topics" / "demo-alpha-topic.md").write_text(
+        "---\ntrack: llm-infra\ntags: [demo, fixture]\n"
+        "related: [demo-beta-topic]\ncreated: 2026-01-01\nupdated: 2026-01-02\n---\n"
         "# Demo Alpha Topic\n\n## Concept\nAlpha concept paragraph for the reader. "
         "See also [beta](demo-beta-topic.md) and [notes](../session-notes.md).\n")
     (study / "topics" / "demo-beta-topic.md").write_text(
+        "---\ntrack: llm-infra\ntags: []\nrelated: []\n"
+        "created: 2026-01-01\nupdated: 2026-01-02\n---\n"
         "# Demo Beta Topic\n\n## Concept\ntest\n")
     briefs = root / "briefs"
     briefs.mkdir()

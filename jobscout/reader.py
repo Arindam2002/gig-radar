@@ -18,15 +18,19 @@ import markdown
 import streamlit as st
 from pygments.formatters import HtmlFormatter
 
+from jobscout import graph
+
 _EXT_LINK = re.compile(r'<a href="(https?://[^"]+)"')
 
 
 def topic_html(md: str) -> str:
     """Markdown -> HTML for the reader. Topic links are expected to be
     rewritten to dashboard links (see dashboard.linkify_topics) BEFORE this
-    is called; external links open in a new tab."""
+    is called; external links open in a new tab. The YAML frontmatter block
+    is metadata for the graph, not prose, so it never reaches the page."""
+    _, body_md = graph.split_frontmatter(md)
     body = markdown.markdown(
-        md,
+        body_md,
         extensions=["extra", "sane_lists", "codehilite"],
         extension_configs={"codehilite": {"css_class": "jsr-code",
                                           "guess_lang": False}},

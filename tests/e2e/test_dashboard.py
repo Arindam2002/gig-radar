@@ -108,6 +108,33 @@ def test_topic_link_opens_topic_page(page, server):
     assert page.locator("text=Page not found").count() == 0
 
 
+def test_topic_page_hides_frontmatter(page, server):
+    """The YAML block is metadata for the graph, not prose: the article opens
+    on its H1, with no stray '---' rule and no `track:` line in the text."""
+    goto_page(page, server, "/study?topic=demo-alpha-topic")
+    page.wait_for_selector("#jsr-art h1", timeout=30000)
+    text = page.locator("#jsr-art").inner_text().strip()
+    assert not text.startswith("---")
+    assert "track:" not in text and "related:" not in text
+    assert page.locator("#jsr-art h1").first.inner_text() == "Demo Alpha Topic"
+    assert text.startswith("Demo Alpha Topic")
+
+
+def test_topic_page_related_strip(page, server):
+    """The Related strip is the neighbourhood in both directions: alpha
+    declares beta (outbound), so beta's page must show alpha (inbound)."""
+    goto_page(page, server, "/study?topic=demo-alpha-topic")
+    page.wait_for_selector("div.topic-related", timeout=30000)
+    strip = page.locator("div.topic-related").first
+    assert strip.inner_text().startswith("Related:")
+    assert strip.locator("a[href='study?topic=demo-beta-topic']").count() == 1
+
+    goto_page(page, server, "/study?topic=demo-beta-topic")
+    page.wait_for_selector("div.topic-related", timeout=30000)
+    back = page.locator("div.topic-related").first
+    assert back.locator("a[href='study?topic=demo-alpha-topic']").count() == 1
+
+
 def test_topic_page_highlight_note_and_studied(page, server):
     """Selecting text in the article offers Highlight; the highlight persists
     to study_notes, re-renders as a <mark>, takes a note, and the page's
