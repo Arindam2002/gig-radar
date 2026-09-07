@@ -83,7 +83,14 @@ plus a `FIRECRAWL_API_KEY`.
   Study          the interview prep base (see below): each topic opens
                  on its own page where you can highlight text, leave
                  notes on it, and mark the topic studied
+  Map            the same study base drawn as a graph, one node per topic
 ```
+
+The Map page draws every topic as a circle sized by how long it is and
+coloured by its track, with a line to each topic it links to, so you can see
+what you have covered and what is sitting on its own. Filter by track, hide
+what you have already studied, click a node to open the topic, and drag one
+if you want it to stay put.
 
 If you want to write something up from a topic, `python -m jobscout.pack <slug>`
 gathers the topic, its flashcards, its diagram, your highlights and any session

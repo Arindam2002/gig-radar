@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT))
 from jobscout import cards  # noqa: E402
 from jobscout import db  # noqa: E402
 from jobscout import graph  # noqa: E402
+from jobscout import mapview  # noqa: E402
 from jobscout import outreach  # noqa: E402
 from jobscout import reader  # noqa: E402
 from jobscout.normalize import salary_display  # noqa: E402
@@ -1216,6 +1217,46 @@ def page_study():
                 "run it once (Scheduled sidebar → Run now) to start it.")
 
 
+def page_map():
+    if topic_article():
+        return
+    page_header("🗺 Map", "the study base as a picture: every topic a node, "
+                "coloured by track, linked by what it points at")
+    g = graph.build(study_dir(), conn)
+    if not g["nodes"]:
+        st.info("Nothing to draw yet - the study base is created by the daily "
+                "`job-scout-daily-brief` routine.")
+        return
+
+    tracks = sorted({n["track"] for n in g["nodes"]})
+    c1, c2 = st.columns([3.2, 1.1], vertical_alignment="center")
+    with c1:
+        chosen = st.pills("Tracks", tracks, selection_mode="multi",
+                          default=tracks, key="map_tracks",
+                          label_visibility="collapsed")
+    with c2:
+        unstudied = st.toggle("Unstudied only", key="map_unstudied")
+
+    view = mapview.filter_graph(g, tracks=list(chosen or []),
+                                unstudied_only=unstudied)
+    n_done = sum(1 for n in view["nodes"] if n["studied"])
+    st.caption(f"{len(view['nodes'])} topic{'s' if len(view['nodes']) != 1 else ''} · "
+               f"{len(view['edges'])} link{'s' if len(view['edges']) != 1 else ''} · "
+               f"{n_done} studied")
+    if not view["nodes"]:
+        st.info("No topics match these filters. Pick a track back up, or turn "
+                "off \"Unstudied only\".")
+        return
+
+    key = "study_map"
+    pins = getattr(st.session_state.get(key), "pins", None) or {}
+    mapview.study_map(view, pins=pins, key=key)
+    st.caption("Click a node to open the topic. Drag one to pin it where you "
+               "want it; pins survive reruns. A solid ring means studied, a "
+               "dashed outline means it is still waiting on you, and the badge "
+               "counts your notes.")
+
+
 # ── navigation ──────────────────────────────────────────────────────
 pg = st.navigation([
     st.Page(page_today, title="Today", icon="📋", default=True),
@@ -1223,6 +1264,7 @@ pg = st.navigation([
     st.Page(page_outreach, title="Outreach", icon="✉️", url_path="outreach"),
     st.Page(page_tracker, title="Tracker", icon="📊", url_path="tracker"),
     st.Page(page_study, title="Study", icon="📚", url_path="study"),
+    st.Page(page_map, title="Map", icon="🗺️", url_path="map"),
 ])
 
 # global sidebar footer: the one action that isn't page-specific
