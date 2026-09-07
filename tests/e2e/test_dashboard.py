@@ -174,15 +174,23 @@ def test_publish_toggle(page, server):
     deepened it since. Asserting the exact sha256 here is what makes that
     comparison meaningful rather than a formality.
 
+    Deepening the file behind the page's back is the case that matters, so
+    the fixture topic is rewritten mid-test and restored (text and mtime,
+    because mtime is what "studied" is measured against) before the suite
+    moves on.
+
     Only the technical half of the control is covered. The disabled resume
     variant needs a third fixture topic, and this suite has three assertions
     that count the fixture topics exactly (the checklist's "0/2 studied" and
     two map tests asserting two nodes), so adding one would break them.
     """
+    import os
+
     from jobscout import publish
 
     topic_file = (Path(server["db_path"]).parent / "study" / "topics"
                   / "demo-alpha-topic.md")
+    original, stat = topic_file.read_text(), topic_file.stat()
     goto_page(page, server, "/study?topic=demo-alpha-topic")
     page.wait_for_selector("#jsr-art h1", timeout=30000)
     assert page.locator("text=Publish this version >> visible=true").count() >= 1
@@ -194,8 +202,32 @@ def test_publish_toggle(page, server):
     row = conn.execute("SELECT reviewed_at, content_hash FROM study_publish "
                        "WHERE slug=?", ("demo-alpha-topic",)).fetchone()
     assert row is not None and row["reviewed_at"]
-    assert row["content_hash"] == publish.content_hash(topic_file.read_text())
+    assert row["content_hash"] == publish.content_hash(original)
 
+    try:
+        # the routine deepens the topic overnight: the flag is still on, but
+        # the approved version is no longer the one on disk
+        topic_file.write_text(original + "\nDeepened after you reviewed it.\n")
+        deepened = publish.content_hash(topic_file.read_text())
+        goto_page(page, server, "/study?topic=demo-alpha-topic")
+        page.wait_for_selector(
+            "text=the published version differs from the current file",
+            timeout=30000)
+        assert conn.execute("SELECT content_hash FROM study_publish WHERE slug=?",
+                            ("demo-alpha-topic",)).fetchone()["content_hash"] \
+            != deepened
+        page.locator("button",
+                     has_text="Re-review and publish this version").first.click()
+        page.wait_for_selector("text=This version is approved", timeout=15000)
+        assert conn.execute("SELECT content_hash FROM study_publish WHERE slug=?",
+                            ("demo-alpha-topic",)).fetchone()["content_hash"] \
+            == deepened
+    finally:
+        topic_file.write_text(original)
+        os.utime(topic_file, (stat.st_atime, stat.st_mtime))
+
+    goto_page(page, server, "/study?topic=demo-alpha-topic")
+    page.wait_for_selector("#jsr-art h1", timeout=30000)
     page.locator("div[data-testid='stCheckbox']",
                  has_text="Publish this version").first.click()
     page.wait_for_selector("text=Off by default", timeout=15000)
