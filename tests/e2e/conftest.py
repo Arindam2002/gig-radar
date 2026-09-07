@@ -16,7 +16,8 @@ sys.path.insert(0, str(ROOT))
 from jobscout import db  # noqa: E402
 from jobscout.models import Job  # noqa: E402
 
-PORT = 8599
+# override when two suites must run side by side (parallel worktrees)
+PORT = int(os.environ.get("JOBSCOUT_E2E_PORT", "8599"))
 
 
 def _iso(days_ago=0, hours_ago=0):
