@@ -460,7 +460,10 @@ export default function (component) {
       p1: TAU * w(), p2: TAU * w(), p3: TAU * w(), p4: TAU * w(),
     }
   })
-  if (still) for (let i = 0; i < n; i++) { P[i].born = 1 }
+  // a hidden tab never runs the loop that grows nodes in, so a map mounted
+  // in the background must arrive fully drawn (it would otherwise show only
+  // edges until the tab is focused)
+  if (still || document.hidden) for (let i = 0; i < n; i++) { P[i].born = 1 }
 
   const wobX = (p) => p.ax * (0.72 * Math.sin(T * p.f1 + p.p1) +
                               0.28 * Math.sin(T * p.f2 + p.p2))
