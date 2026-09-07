@@ -70,7 +70,22 @@ Read STUDY.md first.
    early-startup-specific), and 1 RESUME-DRILL topic (step 9).
 
 9. **Write/extend technical topic files** in study/topics/:
-   - NEW topic → create <slug>.md: `# <Topic>` / `## Concept` (first
+   - **Every topic file starts with a YAML frontmatter block, before the
+     `# ` heading.** It is the only metadata the tooling has, so it is not
+     optional and it is never dropped, reordered or reformatted:
+     ```
+     ---
+     track: llm-infra          # dsa | backend | system-design | llm-infra | resume
+     tags: [rag, reranking]    # 2-5 lowercase kebab-case tags
+     related: [llm-evaluation-and-guardrails, sql-indexing-query-performance]
+     created: 2026-01-31       # ISO date, set once and never touched again
+     updated: 2026-01-31       # ISO date, bumped on every revision
+     ---
+     ```
+     No `title` key - the `# ` heading is the title. `related` holds slugs of
+     topics that ALREADY have files: at least 2 for a technical topic, and
+     the reason the graph is worth drawing. Resume drills need none.
+   - NEW topic → create <slug>.md: frontmatter / `# <Topic>` / `## Concept` (first
      principles, ~200 words) / `## Why interviewers ask this` / `## Q&A` (3-4
      questions, each with a COMPLETE teaching answer - reasoning and
      trade-offs, not bullet fragments) / `## Mental model` (describe the
@@ -78,7 +93,14 @@ Read STUDY.md first.
      (2-3 harder unanswered follow-ups).
    - REVISION topic (studied ones only) → open its file, ANSWER the "Deepen
      next time" questions, add 1-2 harder Q&As, refresh "Deepen next time".
-     Never duplicate; deepen.
+     Never duplicate; deepen. Keep the frontmatter block, set `updated` to
+     today, and leave `created` alone.
+   - **Link as you write.** When a deepened answer leans on another topic,
+     do BOTH: add that slug to `related` (if it is not already there), and
+     put an inline `[text](<slug>.md)` link in the answer text itself where
+     the reader would want it. The link and the list are the same graph seen
+     twice - the list is the deliberate map, the inline link is what makes
+     the sentence useful. Never link a slug with no file.
    - **DSA topics: every named problem carries a practice link.** Use
      https://neetcode.io/problems/<slug> for problems in the NeetCode roadmap,
      otherwise the leetcode.com URL. Add a `## Practice` section listing the
@@ -86,7 +108,8 @@ Read STUDY.md first.
 
 10. **Resume drill** - files named study/topics/resume-<slug>.md, one per major
    resume claim. Rotate: each day cover the next uncovered claim, or deepen one
-   due for revision. Structure: `# Resume drill: <Claim>` / `## The claim`
+   due for revision. Same frontmatter block as rule 9 (`track: resume`;
+   `related` may stay empty). Structure: `# Resume drill: <Claim>` / `## The claim`
    (quote the resume) / `## Interviewer probes` (5-6 cross-examination
    questions: how measured, alternatives considered, what breaks at 10x, YOUR
    part vs the team's) / `## Strong answers` (complete model answers in the
