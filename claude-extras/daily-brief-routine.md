@@ -70,6 +70,14 @@ Read STUDY.md first.
    early-startup-specific), and 1 RESUME-DRILL topic (step 9).
 
 9. **Write/extend technical topic files** in study/topics/:
+   - **No company names in topic files.** The `## Why interviewers ask this`
+     section describes the market generically ("mid-size product companies
+     and MNCs hiring for platform roles ask this because..."), never "today's
+     pool: X, Y, Z". Company names belong in the brief, not the study base:
+     topics are meant to be publishable once you have reviewed them, and the
+     publish step does not strip names for you, so keep them out at the
+     source. The same goes for your employer and for identifying details of
+     your own production systems (describe the mechanism, not the system).
    - **Every topic file starts with a YAML frontmatter block, before the
      `# ` heading.** It is the only metadata the tooling has, so it is not
      optional and it is never dropped, reordered or reformatted:
