@@ -373,3 +373,95 @@ for i in range(300):
         assert job_status(server, "AI Infrastructure Engineer") == "shortlisted"
     finally:
         proc.wait(timeout=60)
+
+
+# ── the Map page (WS-B) ─────────────────────────────────────────────
+# The layout lives in the component's JavaScript, so these assert on what
+# the browser actually drew: how many circles, where they ended up, and
+# whether the picture is the same one after a rerun.
+
+def _map_nodes(page):
+    """[(slug, cx, cy, r), ...] for every node the map drew, sorted."""
+    got = page.eval_on_selector_all(
+        "circle.jsm-node",
+        """els => els.map(e => [e.dataset.slug, +e.getAttribute('cx'),
+                                +e.getAttribute('cy'), +e.getAttribute('r')])""")
+    return sorted(got)
+
+
+def test_map_renders_and_navigates(page, server):
+    """/map draws one node per topic and a line for the alpha->beta edge;
+    clicking a node opens that topic's page."""
+    goto_page(page, server, "/map")
+    page.wait_for_selector("circle.jsm-node", timeout=30000)
+    assert page.locator("circle.jsm-node").count() == 2      # the two fixtures
+    assert page.locator("line.jsm-edge").count() >= 1        # alpha -> beta
+    assert page.locator("text=2 topics >> visible=true").count() >= 1
+    page.locator("circle.jsm-node[data-slug='demo-alpha-topic']").click()
+    page.wait_for_url(re.compile(r"topic=demo-alpha-topic"), timeout=30000)
+    page.wait_for_selector("#jsr-art h1", timeout=30000)
+    assert "topic=demo-alpha-topic" in page.url
+
+
+def test_map_track_filter(page, server):
+    """Dropping a track pill takes its nodes off the canvas. Both fixture
+    topics are llm-infra, so deselecting it empties the map."""
+    goto_page(page, server, "/map")
+    page.wait_for_selector("circle.jsm-node", timeout=30000)
+    assert page.locator("circle.jsm-node").count() == 2
+    page.get_by_text("llm-infra", exact=True).first.click()
+    page.wait_for_timeout(2500)
+    assert page.locator("circle.jsm-node").count() < 2
+    assert page.locator("text=No topics match these filters >> visible=true").count() >= 1
+    # put it back so the page is usable again
+    page.get_by_text("llm-infra", exact=True).first.click()
+    page.wait_for_timeout(2500)
+    assert page.locator("circle.jsm-node").count() == 2
+
+
+def test_map_layout_is_deterministic(page, server):
+    """Streamlit reruns the whole script on every interaction: the layout is
+    seeded from the node set, so the same topics must land in the same place
+    rather than jumping under the cursor."""
+    goto_page(page, server, "/map")
+    page.wait_for_selector("circle.jsm-node", timeout=30000)
+    before = _map_nodes(page)
+    assert len(before) == 2
+    for _ in range(2):                       # off -> on -> off, two full reruns
+        page.get_by_text("Unstudied only", exact=True).first.click()
+        page.wait_for_timeout(2500)
+    page.wait_for_selector("circle.jsm-node", timeout=30000)
+    after = _map_nodes(page)
+    assert [n[0] for n in after] == [n[0] for n in before]
+    for (slug, x1, y1, _), (_, x2, y2, _) in zip(before, after):
+        assert abs(x1 - x2) <= 1 and abs(y1 - y2) <= 1, f"{slug} moved"
+
+
+def test_map_has_no_external_resources(page, server):
+    """The dashboard runs offline and in Docker: the component may not pull
+    a script, a stylesheet or a font from anywhere."""
+    from jobscout import mapview
+    blob = mapview._HTML + mapview._CSS + mapview._JS
+    for needle in ("https://", "http://", "//cdn", "fetch(", "@import"):
+        assert needle not in blob, f"component source references {needle}"
+    goto_page(page, server, "/map")
+    page.wait_for_selector("circle.jsm-node", timeout=30000)
+    assert page.eval_on_selector_all(
+        ".jsm-wrap [src], .jsm-wrap [href]", "els => els.length") == 0
+
+
+def test_map_nodes_do_not_overlap(page, server):
+    """Two circles on top of each other are two topics you cannot click."""
+    import math
+
+    import pytest
+    goto_page(page, server, "/map")
+    page.wait_for_selector("circle.jsm-node", timeout=30000)
+    got = _map_nodes(page)
+    if len(got) < 2:
+        pytest.skip("need at least two topics to overlap")
+    for i in range(len(got)):
+        for j in range(i + 1, len(got)):
+            (s1, x1, y1, r1), (s2, x2, y2, r2) = got[i], got[j]
+            d = math.hypot(x1 - x2, y1 - y2)
+            assert d >= r1 + r2, f"{s1} and {s2} overlap: {d:.1f} < {r1 + r2}"
