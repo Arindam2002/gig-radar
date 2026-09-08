@@ -55,7 +55,9 @@ Resume drills (`resume-*`) get no diagram. Refuse politely and say why.
    - labels overlapping other labels, boxes or arrows,
    - arrows running through boxes they do not connect,
    - arrowheads bunched at one corner,
-   - text too small, clipped, or spilling out of its box.
+   - text too small, clipped, or spilling out of its box,
+   - a label sitting on the edge of a band or frame, so the outline is drawn
+     through the words. Put it fully inside or fully clear.
 
    Fix the scene and run the loop again. At most 4 rounds. Stop when the lint
    reports zero errors and your own look at the PNG finds nothing wrong.

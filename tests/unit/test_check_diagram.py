@@ -274,6 +274,81 @@ def test_g_a_label_that_fits_does_not_warn():
     assert rules(cd.lint_scene(doc), "text-overflow") == []
 
 
+# --------------------------------------------------------------- rule h
+def zone(zid, x, y, w=600, h=400, *, kind="rectangle"):
+    """A dashed grouping frame: no fill, so `_is_zone` says yes."""
+    z = rect(zid, x, y, w, h, bg="transparent")
+    z["type"] = kind
+    z["strokeStyle"] = "dashed"
+    return z
+
+
+def test_h_text_well_inside_a_zone_passes():
+    doc = scene(zone("z", 0, 0), text("t", 100, 100, "inside", w=200, h=25))
+    assert rules(cd.lint_scene(doc), "text-over-outline") == []
+
+
+def test_h_text_well_outside_a_zone_passes():
+    doc = scene(zone("z", 0, 0), text("t", 800, 100, "outside", w=200, h=25))
+    assert rules(cd.lint_scene(doc), "text-over-outline") == []
+
+
+def test_h_text_straddling_the_zone_border_is_an_error():
+    """The label hangs off the right edge, so the dashed stroke runs
+    through the middle of the words."""
+    doc = scene(zone("z", 0, 0), text("t", 500, 100, "on the line", w=200, h=25))
+    found = rules(cd.lint_scene(doc), "text-over-outline", cd.ERROR)
+    assert len(found) == 1
+    assert ids(found) == {"t", "z"}
+    assert "stroke is drawn through the words" in found[0]["message"]
+
+
+def test_h_a_translucent_band_counts_as_a_zone_too():
+    band = rect("band", 0, 0, 600, 400, opacity=30)
+    doc = scene(band, text("t", 500, 100, "on the line", w=200, h=25))
+    assert len(rules(cd.lint_scene(doc), "text-over-outline", cd.ERROR)) == 1
+
+
+def test_h_a_crossing_within_tolerance_is_forgiven():
+    """2px of overhang is a rounding wobble, not a line through the text."""
+    doc = scene(zone("z", 0, 0), text("t", 398, 100, "just over", w=204, h=25))
+    assert rules(cd.lint_scene(doc), "text-over-outline") == []
+
+
+def test_h_a_container_label_is_exempt_against_its_own_zone():
+    """A zone's own title may sit on the zone's edge. A stray label in exactly
+    the same place may not."""
+    z = zone("z", 0, 0)
+    own = text("z_lbl", 500, 100, "the pool", container="z", w=200, h=25)
+    z["boundElements"].append({"id": "z_lbl", "type": "text"})
+    assert rules(cd.lint_scene(scene(z, own)), "text-over-outline") == []
+
+    stray = scene(zone("z", 0, 0), text("t", 500, 100, "the pool", w=200, h=25))
+    assert len(rules(cd.lint_scene(stray), "text-over-outline", cd.ERROR)) == 1
+
+
+def test_h_an_elliptical_zone_is_measured_on_the_ellipse_not_its_box():
+    """One text box, one set of bounds, two zone shapes. Down at the ellipse's
+    lower-right shoulder the box straddles the arc while sitting well inside
+    the bounding rectangle, so the ellipse errors and the rectangle does not."""
+    body = text("t", 450, 330, "on the ring", w=140, h=25)
+
+    found = rules(cd.lint_scene(scene(zone("ez", 0, 0, kind="ellipse"), body)),
+                  "text-over-outline", cd.ERROR)
+    assert len(found) == 1
+    assert ids(found) == {"t", "ez"}
+
+    boxed = scene(zone("z", 0, 0), text("t", 450, 330, "on the ring",
+                                        w=140, h=25))
+    assert rules(cd.lint_scene(boxed), "text-over-outline") == []
+
+
+def test_h_text_inside_an_elliptical_zone_passes():
+    doc = scene(zone("ez", 0, 0, kind="ellipse"),
+                text("t", 250, 190, "in the ring", w=140, h=25))
+    assert rules(cd.lint_scene(doc), "text-over-outline") == []
+
+
 # --------------------------------------------------------------- structural
 def test_binding_that_is_not_listed_back_is_an_error():
     box = rect("box", 0, 0)                       # no boundElements entry

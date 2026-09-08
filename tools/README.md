@@ -76,6 +76,7 @@ file happens to store it.
 | --- | --- | --- |
 | `text-over-text` | error | Two text boxes intersect by more than 2px on both axes. |
 | `text-over-shape` | error | Text sits on a shape it does not label. Zones are exempt. |
+| `text-over-outline` | error | Text crosses a zone's outline: the box is neither wholly inside the zone nor wholly clear of it, allowing 3px either way. Text on a zone is fine, text on its edge is not, because the zone's stroke is drawn through the words. An elliptical zone is measured against the ellipse, not its bounding box. A zone's own label is exempt against that zone. |
 | `arrow-through-shape` | error | An arrow segment crosses a shape it is not attached to, measured with a 4px inset so a line hugging an edge does not count. Checked per segment, so a multi-point arrow is caught on whichever leg does it, and dashed arrows count the same as solid ones. |
 | `arrow-over-text` | error | An arrow segment crosses a text box that is not its own label. |
 | `label-bound-to-arrow` | error | A text element has `containerId` pointing at an arrow. See below. |
@@ -86,6 +87,14 @@ A **zone** is a background band or a grouping frame rather than a solid box:
 either an opacity under 100, or no fill at all. Zones exist to have things drawn
 on top of them and arrows crossing their edge, so `text-over-shape` and
 `arrow-through-shape` skip them.
+
+The one thing a zone does not tolerate is a label parked on its edge, which is
+what `text-over-outline` is for. Drawing on a zone is the point; landing half on
+and half off it puts the stroke through the words, and no z-order or opacity
+setting moves the line off them. Either pull the text fully inside the zone or
+push it fully clear. When neither fits, the zone is too tight for the label:
+rewrap the text onto more lines, or open a corridor by moving the zone and
+whatever sits beyond it.
 
 An arrow counts as **attached** to a shape when it is bound to it, and also
 when either endpoint lands inside it (within 8px). The second case matters

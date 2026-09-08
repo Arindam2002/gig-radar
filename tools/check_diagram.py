@@ -43,6 +43,7 @@ TEXT_OVERLAP = 2.0     # two text boxes may share this many px per axis
 SHAPE_INSET = 4.0      # arrows may clip this far into a box before it counts
 TEXT_INSET = 2.0       # ... and this far into a text box
 TOUCH_PAD = 8.0        # an unbound arrow may end this far inside a shape
+ZONE_EDGE_TOL = 3.0    # a text box may cross a zone's outline by this much
 PILEUP_GAP = 12.0      # two arrowheads closer than this on one side pile up
 STRAY_PAD = 240.0      # an element this far outside everything else is lost
 CHAR_W = 0.55          # Excalifont glyph width as a fraction of the font size
@@ -125,6 +126,42 @@ def union(boxes):
 def contains(box, pt, pad: float = 0.0) -> bool:
     return (box[0] - pad <= pt[0] <= box[2] + pad
             and box[1] - pad <= pt[1] <= box[3] + pad)
+
+
+def corners(box):
+    return ((box[0], box[1]), (box[2], box[1]),
+            (box[2], box[3]), (box[0], box[3]))
+
+
+def rect_inside(inner, outer, tol: float = 0.0) -> bool:
+    """Is `inner` wholly within `outer`, forgiving `tol` px of overhang?"""
+    return (inner[0] >= outer[0] - tol and inner[1] >= outer[1] - tol
+            and inner[2] <= outer[2] + tol and inner[3] <= outer[3] + tol)
+
+
+def ellipse_of(box, grow: float = 0.0):
+    """(cx, cy, rx, ry) of the ellipse drawn in `box`, radii nudged by `grow`."""
+    return ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2,
+            max((box[2] - box[0]) / 2 + grow, 0.01),
+            max((box[3] - box[1]) / 2 + grow, 0.01))
+
+
+def pt_in_ellipse(pt, e) -> bool:
+    cx, cy, rx, ry = e
+    return ((pt[0] - cx) / rx) ** 2 + ((pt[1] - cy) / ry) ** 2 <= 1.0
+
+
+def box_hits_ellipse(box, e) -> bool:
+    """Does an axis-aligned box touch the ellipse's filled area?
+
+    Dividing by rx and ry turns the ellipse into the unit circle and leaves the
+    box axis-aligned, so this reduces to the distance from the origin to a
+    rectangle, which is exact rather than a corner-sampling approximation.
+    """
+    cx, cy, rx, ry = e
+    x0, x1 = (box[0] - cx) / rx, (box[2] - cx) / rx
+    y0, y1 = (box[1] - cy) / ry, (box[3] - cy) / ry
+    return math.hypot(max(x0, -x1, 0.0), max(y0, -y1, 0.0)) <= 1.0
 
 
 def seg_box_hit(p0, p1, box, min_len: float = 1.0):
@@ -536,6 +573,33 @@ def _geometry(live, by_id, boxes) -> list[dict]:
                 f"{t['id']} ({_snip(t)}) needs ~{need_h:.0f}px of height for "
                 f"{len(lines)} lines and {c['id']} offers {avail_h:.0f}px, so it "
                 f"will overflow", at=(cb[0], cb[1])))
+
+    # (h) text sitting on a zone's outline -------------------------------
+    # A zone is drawn to have things on top of it, so text well inside one is
+    # fine and text clear of it is fine. Text that straddles the boundary is
+    # not: the zone's stroke is drawn straight through the words, and no
+    # z-order or opacity setting moves the line off them.
+    for t in texts:
+        tb = B(t["id"])
+        for s in shapes:
+            if not _is_zone(s) or s["id"] == t.get("containerId"):
+                continue
+            sb = B(s["id"])
+            if s.get("type") == "ellipse":
+                inside = all(pt_in_ellipse(p, ellipse_of(sb, ZONE_EDGE_TOL))
+                             for p in corners(tb))
+                clear = not box_hits_ellipse(tb, ellipse_of(sb, -ZONE_EDGE_TOL))
+            else:
+                inside = rect_inside(tb, sb, ZONE_EDGE_TOL)
+                ox, oy = overlap(tb, inset(sb, ZONE_EDGE_TOL))
+                clear = ox <= 0 or oy <= 0
+            if inside or clear:
+                continue
+            out.append(finding(
+                "text-over-outline", ERROR, [t["id"], s["id"]],
+                f"{t['id']} ({_snip(t)}) crosses the outline of the zone "
+                f"{s['id']}, so the zone stroke is drawn through the words",
+                at=(tb[0], tb[1])))
     return out
 
 
