@@ -681,7 +681,7 @@ def render_png(svg: Path, png: Path, scale: int = 2) -> tuple[bool, str]:
                 page = browser.new_page(device_scale_factor=scale, viewport={
                     "width": max(320, min(4000, int(w) + 4)),
                     "height": max(320, min(4000, int(h) + 4))})
-                page.goto(holder.as_uri())
+                page.goto(holder.resolve().as_uri())   # as_uri needs an absolute path
                 page.locator("svg").first.screenshot(path=str(png))
             finally:
                 browser.close()
