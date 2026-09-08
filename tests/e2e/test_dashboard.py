@@ -608,3 +608,96 @@ def test_map_nodes_do_not_overlap(page, server):
             (s1, x1, y1, r1), (s2, x2, y2, r2) = got[i], got[j]
             d = math.hypot(x1 - x2, y1 - y2)
             assert d >= r1 + r2, f"{s1} and {s2} overlap: {d:.1f} < {r1 + r2}"
+
+
+def test_map_double_click_unpins(page, server):
+    """A drag pins a topic where you let go; a double-click lets it go again.
+
+    What "pinned" is observable as is the `jsm-pinned` class plus the fact
+    that it survives a rerun: the pin is emitted with `setStateValue("pins",
+    ...)`, lands in session state, and comes back down through `data.pins`
+    on the fresh mount, so an unrelated filter toggle must not shake it off.
+
+    It is deliberately *not* asserted as stillness. Pinning takes the node out
+    of the force integration, but the per-node breathing wander is a
+    render-time offset that runs on every node regardless - a pinned circle
+    still wobbles its two or three pixels (measured: ~3.3px of `cx` span over
+    three seconds, against ~3.9px unpinned).
+
+    The double-click also has to not open the topic. A pinned node delays its
+    single click by 220ms precisely so a second one can cancel it, and this is
+    the test that the delay actually catches it.
+    """
+    def is_pinned():
+        return page.eval_on_selector(
+            "circle.jsm-node[data-slug='demo-alpha-topic']",
+            "e => e.closest('g.jsm-item').classList.contains('jsm-pinned')")
+
+    def centre():
+        b = page.locator("circle.jsm-node[data-slug='demo-alpha-topic']").bounding_box()
+        return b["x"] + b["width"] / 2, b["y"] + b["height"] / 2
+
+    def cx_span(samples=12, gap=120):
+        """How far `cx` travels over ~1.4s. The wander is a slow Lissajous, so
+        one pair of samples can straddle a turning point; a window cannot."""
+        got = []
+        for _ in range(samples):
+            got.append(page.eval_on_selector(
+                "circle.jsm-node[data-slug='demo-alpha-topic']",
+                "e => +e.getAttribute('cx')"))
+            page.wait_for_timeout(gap)
+        return max(got) - min(got)
+
+    goto_page(page, server, "/map")
+    page.wait_for_selector("circle.jsm-node", timeout=30000)
+    svg = page.locator("svg.jsm-svg").bounding_box()
+    # somewhere on the canvas that is not a node: parking the pointer here
+    # releases the hover freeze, which is a different thing from a pin and
+    # would otherwise answer the drift question below for the wrong reason
+    away = (svg["x"] + 5, svg["y"] + svg["height"] - 5)
+    page.mouse.move(*away)
+    page.wait_for_timeout(1200)
+    assert not is_pinned()
+
+    # Hover first, then re-read the box: the node stops drifting under the
+    # pointer, so the coordinates the drag starts from are still true by the
+    # time it presses. Same reason as test_map_renders_and_navigates.
+    page.mouse.move(*centre())
+    page.wait_for_timeout(400)
+    sx, sy = centre()
+    tx = min(max(sx + 90, svg["x"] + 60), svg["x"] + svg["width"] - 60)
+    ty = min(max(sy + 70, svg["y"] + 60), svg["y"] + svg["height"] - 60)
+    assert abs(tx - sx) + abs(ty - sy) > 40, "drag too short to count as one"
+    page.mouse.down()
+    for i in range(1, 11):                   # in steps, so onMove really runs
+        page.mouse.move(sx + (tx - sx) * i / 10, sy + (ty - sy) * i / 10)
+        page.wait_for_timeout(20)
+    page.mouse.up()
+    page.wait_for_timeout(2500)              # setStateValue -> rerun -> remount
+    assert is_pinned(), "letting go of a drag should pin the topic"
+
+    # and the pin is in session state, not just in the class list: two more
+    # full reruns from an unrelated control, and it is still pinned
+    for _ in range(2):
+        page.get_by_text("Unstudied only", exact=True).first.click()
+        page.wait_for_timeout(2500)
+    assert is_pinned(), "the pin did not survive a rerun"
+
+    was = page.url
+    page.mouse.move(*centre())               # freeze the drift, then aim
+    page.wait_for_timeout(400)
+    page.mouse.dblclick(*centre())
+    page.wait_for_timeout(2500)
+    assert not is_pinned(), "a double-click should unpin"
+    assert page.url == was, f"the double-click navigated to {page.url}"
+    assert "topic=" not in page.url
+
+    # let go of the hover freeze and it breathes again
+    page.mouse.move(*away)
+    page.wait_for_timeout(1200)
+    assert cx_span() > 0.3, "an unpinned node should drift again"
+
+    # pins live in session state for as long as the browser session does, so
+    # hand the next test a fresh one rather than whatever this one left
+    page.reload()
+    page.wait_for_selector("circle.jsm-node", timeout=30000)
