@@ -464,6 +464,26 @@ def test_png_is_rendered_at_2x_when_chromium_is_available(tmp_path):
     assert width == 400
 
 
+def test_png_renders_from_a_relative_path(tmp_path, monkeypatch):
+    # Regression: the holder HTML used to go through Path.as_uri() unresolved,
+    # which raises on a relative path, so `--png study/diagrams/x.excalidraw`
+    # from the repo root failed while absolute paths and slugs worked.
+    pytest.importorskip("playwright", reason="playwright is not installed")
+    src = write(tmp_path, "ok", clean_scene())
+    svg = src.with_suffix(".svg")
+    svg.write_text(SVG)
+    ok, message = cd.render_png(svg, src.with_suffix(".probe.png"))
+    if not ok:
+        pytest.skip(f"chromium did not launch: {message}")
+    monkeypatch.chdir(tmp_path)
+    rel_svg = svg.relative_to(tmp_path)          # diagrams/ok.svg
+    rel_png = src.with_suffix(".png").relative_to(tmp_path)
+    assert not rel_svg.is_absolute()
+    ok, message = cd.render_png(rel_svg, rel_png)
+    assert ok, message
+    assert rel_png.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+
+
 def test_the_render_holder_file_is_cleaned_up(tmp_path):
     src = write(tmp_path, "ok", clean_scene())
     svg = src.with_suffix(".svg")
