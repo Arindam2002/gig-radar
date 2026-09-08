@@ -39,8 +39,36 @@ Resume drills (`resume-*`) get no diagram. Refuse politely and say why.
    directory. If it says Node is missing, tell the user the one-time setup
    (`cd tools && npm install`) and the manual fallback (open the `.excalidraw`
    at excalidraw.com, Export image > SVG, save next to the source).
-5. **Report** the SVG path and tick the checklist from step 1 out loud - which
-   named elements made it into the diagram. Anything you dropped, say so.
+5. **Verify. This step is not optional.** A scene that exports without error
+   can still be an unreadable picture, so check it and then look at it:
+
+   ```bash
+   python tools/export_diagrams.py <slug>
+   python tools/check_diagram.py --png <slug>
+   ```
+
+   The checker prints a report and writes `<slug>.lint.json`; `--png` renders
+   `<slug>.png` from the SVG at 2x. Then **read `<slug>.png` with the Read
+   tool** and review the picture against the Mental model prose:
+
+   - anything the prose names that is missing from the picture,
+   - labels overlapping other labels, boxes or arrows,
+   - arrows running through boxes they do not connect,
+   - arrowheads bunched at one corner,
+   - text too small, clipped, or spilling out of its box.
+
+   Fix the scene and run the loop again. At most 4 rounds. Stop when the lint
+   reports zero errors and your own look at the PNG finds nothing wrong.
+
+   Fixes that usually work: give an arrow waypoints so it routes around a box
+   instead of through it, move a label to the emptier side of its segment,
+   spread arrowheads along a side rather than letting them land on one point,
+   widen a box or rewrap its label, open a corridor for a feedback line.
+
+6. **Report** the SVG path and tick the checklist from step 1 out loud - which
+   named elements made it into the diagram. Anything you dropped, say so. Say
+   what the verify loop caught and what you changed, and name anything you
+   accepted as it is, with the reason.
 
 ## Scene file
 
@@ -74,9 +102,17 @@ element sitting on top of a box will drift the moment anyone moves the box.
 **Arrows carry `points` and bindings.** `points` is relative to the arrow's own
 `x`/`y` and starts at `[0, 0]`. `startBinding` and `endBinding` are
 `{"elementId": "<shape id>", "focus": <number>, "gap": <number>}`, and each
-bound shape lists the arrow in its own `boundElements` too. An arrow label is a
-text element with `containerId` set to the arrow. Set `endArrowhead` to
-`"arrow"`; leave `startArrowhead` null unless the prose asks for both ends.
+bound shape lists the arrow in its own `boundElements` too. Set `endArrowhead`
+to `"arrow"`; leave `startArrowhead` null unless the prose asks for both ends.
+
+**An arrow label is never bound to the arrow.** Binding a text element to an
+arrow (`containerId` pointing at the arrow) looks fine in the editor and is
+wrong in the export: the exporter re-centres the label on the arrow's midpoint
+and draws the arrow stroke straight through the words. Write an arrow label as
+a free-standing text element instead (`containerId: null`), positioned beside
+the segment it names: offset from the segment's midpoint, on whichever side has
+more empty room, far enough clear that the label box does not touch the line.
+`tools/check_diagram.py` fails a scene that binds one.
 
 Standalone text (a bottom strip, a formula, a note that belongs to no shape) is
 a text element with `containerId: null`.
@@ -98,6 +134,9 @@ a text element with `containerId: null`.
   marker, draw the bucket, the drip label and the capacity marker. If something
   genuinely cannot be drawn, say which item and why rather than quietly
   dropping it.
+- **Arrow labels are free text beside the arrow, never bound to it.** See the
+  scene file notes above for why. Offset the label from the segment's midpoint
+  on the side with more room.
 - **Layout follows the prose.** It usually says "draw left to right", so lay
   it out left to right, with generous gaps (100px or so between stages) and
   boxes big enough for their labels. Annotations sit next to what they annotate.
