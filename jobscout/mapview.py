@@ -475,8 +475,9 @@ export default function (component) {
   // circle out from under the cursor - and eases back in when you leave. It
   // is three pixels of wander, so this is not about being able to hit the
   // thing so much as about it not squirming while you read its card.
-  const offX = (p) => (still ? 0 : wobX(p) * (1 - p.hold) + p.hx * p.hold)
-  const offY = (p) => (still ? 0 : wobY(p) * (1 - p.hold) + p.hy * p.hold)
+  // a pinned node is parked exactly where it was dropped: no wander either
+  const offX = (p) => (still || p.fixed ? 0 : wobX(p) * (1 - p.hold) + p.hx * p.hold)
+  const offY = (p) => (still || p.fixed ? 0 : wobY(p) * (1 - p.hold) + p.hy * p.hold)
 
   // The opening. The map arrives a tenth smaller than it is and expands to
   // full size over about a second, which is the "settling" a reader sees on
