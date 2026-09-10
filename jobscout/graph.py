@@ -63,6 +63,27 @@ _TRACK_BY_PREFIX = (
 
 MIN_RELATED = 2
 
+# How deep a topic has been worked. Two numbers, both counted from the body
+# text, never stored: the routine rewrites these files daily and any stored
+# count would be a second source of truth going stale.
+#
+# The section shapes below are the six the real base actually uses, in the
+# order they appeared: the first Q&A block, a second round, the two spellings
+# of a deepening log, and the two heading levels the "answered follow-ups"
+# block has been written at.
+_DEPTH_SECTIONS = (
+    re.compile(r"^##\s+Q&A"),
+    re.compile(r"^##\s+Q&A \(round \d+\)"),
+    re.compile(r"^##\s+Deepened\b"),
+    re.compile(r"^###?\s+Answered follow-ups\b"),
+)
+# A question entry: bolded in eleven topics, an H3 in the twelfth. A bare
+# "**Q. …**" with no number is prose, not an entry, and is not counted.
+_DEPTH_ENTRIES = (
+    re.compile(r"^\*\*Q\d+\."),
+    re.compile(r"^###\s+Q\d+\."),
+)
+
 
 def split_frontmatter(text: str) -> tuple[dict, str]:
     """(metadata, body) for a file that opens with a YAML frontmatter block.
@@ -102,6 +123,31 @@ def title_of(body: str, slug: str) -> str:
     if m:
         return m.group(1).strip()
     return slug.replace("-", " ").title()
+
+
+def depth_of(body: str) -> tuple[int, int]:
+    """(questions, rounds) for a topic body.
+
+    `questions` is every question entry anywhere in the file, whichever of
+    the two shapes it is written in. `rounds` is how many times the topic
+    has been sat down with: the opening `## Q&A` block counts as one, and
+    every later round, deepening log and answered-follow-ups block counts as
+    another. A heading matching more than one shape (`## Q&A (round 2)` is
+    both a Q&A heading and a round heading) is still one round.
+
+    Counting lines rather than parsing structure is deliberate: the routine
+    writes these headings by hand every day and gets the spelling slightly
+    wrong now and then. A miscount is a wrong number on a page; a parser
+    that insists on structure is a page that will not render.
+    """
+    questions = 0
+    rounds = 0
+    for line in (body or "").splitlines():
+        if any(p.match(line) for p in _DEPTH_ENTRIES):
+            questions += 1
+        elif any(p.match(line) for p in _DEPTH_SECTIONS):
+            rounds += 1
+    return questions, rounds
 
 
 def is_studied(completed_at: str | None, path: Path) -> bool:
@@ -170,7 +216,8 @@ def _reading_state(conn) -> tuple[dict, dict]:
 def build(study_dir: Path, conn=None) -> dict:
     """The whole graph: {"nodes": [...], "edges": [...], "warnings": [...]}.
 
-    A node is {slug, title, track, tags, words, studied, notes}; an edge is
+    A node is {slug, title, track, tags, words, studied, notes, questions,
+    rounds}; an edge is
     {source, target, kind} with kind "related" (declared in frontmatter) or
     "link" (an inline link in the body). Edges to slugs with no file are
     dropped - reported as a warning when they were declared, silently when
@@ -189,6 +236,7 @@ def build(study_dir: Path, conn=None) -> dict:
         slug = f.stem
         meta, body = split_frontmatter(f.read_text())
         track = track_of(slug, meta)
+        questions, rounds = depth_of(body)
         nodes.append({
             "slug": slug,
             "title": title_of(body, slug),
@@ -197,6 +245,8 @@ def build(study_dir: Path, conn=None) -> dict:
             "words": len(body.split()),
             "studied": is_studied(progress.get(slug), f),
             "notes": int(note_counts.get(slug, 0)),
+            "questions": questions,
+            "rounds": rounds,
         })
 
         if not meta:

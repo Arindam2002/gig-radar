@@ -306,3 +306,200 @@ def test_real_study_folder_report(capsys):
         for w in g["warnings"]:
             print(f"  {w}")
     assert isinstance(g["nodes"], list) and isinstance(g["edges"], list)
+
+
+# ── A4: depth ───────────────────────────────────────────────────────
+# Six synthetic files, one per heading shape the real base actually uses,
+# and both question-entry shapes. The bodies are stand-ins - what is copied
+# from the real folder is the shape of a heading, never its content.
+
+DEPTH_SHAPES = {
+    # the plain first round, questions bolded (eleven real topics)
+    "qa-only": ("""---
+track: backend
+---
+# Topic
+
+## Q&A
+
+**Q1. First?**
+
+Yes.
+
+**Q2. Second?**
+
+Also yes.
+
+**Q3. Third?**
+
+Still yes.
+
+**Q4. Fourth?**
+
+Yes.
+""", (4, 1)),
+
+    # a second round appended under its own heading
+    "qa-round-two": ("""---
+track: backend
+---
+# Topic
+
+## Q&A
+
+**Q1. First?**
+
+Yes.
+
+**Q2. Second?**
+
+Yes.
+
+## Q&A (round 2)
+
+**Q3. Harder?**
+
+Yes.
+
+**Q4. Harder still?**
+
+Yes.
+""", (4, 2)),
+
+    # a dated deepening log, questions as H3 (the EF Core shape)
+    "deepened-dated": ("""---
+track: backend
+---
+# Topic
+
+## Q&A
+
+### Q1. What happens first?
+
+This.
+
+### Q2. And then?
+
+That.
+
+## Deepened 2026-08-28 — answers to last round's follow-ups
+
+Prose, no numbered entries.
+""", (2, 2)),
+
+    # the other spelling of the same log, on a drill with no questions
+    "deepened-revision": ("""---
+track: resume
+---
+# Drill
+
+## The claim
+
+A made-up line.
+
+## Deepened — 2026-08-31 (revision 2)
+
+### Answering last round's follow-ups
+
+Prose.
+""", (0, 1)),
+
+    # follow-ups answered under an H3
+    "followups-h3": ("""---
+track: dsa
+---
+# Topic
+
+## Q&A
+
+**Q1. One?**
+
+Yes.
+
+**Q2. Two?**
+
+Yes.
+
+**Q3. Three?**
+
+Yes.
+
+### Answered follow-ups (2026-08-30 revision)
+
+Prose.
+""", (3, 2)),
+
+    # and under an H2, with no Q&A block at all
+    "followups-h2": ("""---
+track: resume
+---
+# Drill
+
+## The claim
+
+A made-up line.
+
+## Answered follow-ups (2026-08-30 revision)
+
+Prose.
+""", (0, 1)),
+}
+
+
+@pytest.mark.parametrize("name", sorted(DEPTH_SHAPES))
+def test_depth_of_reads_the_six_real_heading_shapes(name, tmp_path):
+    text, expected = DEPTH_SHAPES[name]
+    f = tmp_path / f"{name}.md"
+    f.write_text(text)
+    _, body = graph.split_frontmatter(f.read_text())
+    assert graph.depth_of(body) == expected
+
+
+def test_depth_of_counts_nothing_it_was_not_asked_to():
+    """The near misses, all of them real lines from the study base. "Deepen
+    next time" is in thirteen files and is a to-do list, not a round."""
+    body = ("## Deepen next time\n\n"
+            "- something\n\n"
+            "### Two harder probes to be ready for\n\n"
+            "**Q. An unnumbered question in prose?**\n\n"
+            "Some prose mentioning **Q1. a question** mid-line.\n\n"
+            "## Weak spots\n\n"
+            "## Mental model\n")
+    assert graph.depth_of(body) == (0, 0)
+
+
+def test_depth_of_on_nothing_at_all():
+    assert graph.depth_of("") == (0, 0)
+    assert graph.depth_of(None) == (0, 0)
+
+
+def test_build_puts_questions_and_rounds_on_every_node(study, conn):
+    """Additive: the existing keys are untouched and nothing reads these two
+    until the study page does."""
+    g = graph.build(study, conn)
+    by_slug = {n["slug"]: n for n in g["nodes"]}
+    # the graph fixture's alpha has a Q&A block with one unnumbered question
+    assert by_slug["graph-alpha"]["questions"] == 0
+    assert by_slug["graph-alpha"]["rounds"] == 1
+    assert by_slug["graph-beta"]["rounds"] == 0
+    assert all("questions" in n and "rounds" in n for n in g["nodes"])
+
+
+def test_real_study_folder_depth_table(capsys):
+    """Runs only where the private study folder exists (never in CI), and
+    prints the table rather than asserting on it: how deep a topic has been
+    worked is a fact about the base, not a rule the code enforces."""
+    sdir = settings.study_dir()
+    if not (sdir / "topics").is_dir():
+        pytest.skip("no study folder in this checkout")
+    rows = []
+    for f in graph.topic_files(sdir):
+        meta, body = graph.split_frontmatter(f.read_text())
+        if graph.track_of(f.stem, meta) == "resume":
+            continue
+        rows.append((f.stem, *graph.depth_of(body)))
+    with capsys.disabled():
+        print(f"\nreal study folder: depth of {len(rows)} technical topic(s)")
+        for slug, questions, rounds in rows:
+            print(f"  {slug:48} {questions:3} question(s)  {rounds} round(s)")
+    assert all(isinstance(q, int) and isinstance(r, int) for _, q, r in rows)
