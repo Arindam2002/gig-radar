@@ -691,7 +691,7 @@ def topic_article() -> bool:
     # ── the concept layer: what this topic teaches, and what comes first ──
     # One build for both strips, and the only place this page walks the
     # concept graph (WS-B1's cached `_concept_graph()` swaps in here).
-    cresult = concepts.build(study_dir(), conn)
+    cresult = _concept_graph()
     _concept_chips(slug, cresult)
     _prereq_strip(slug, f, cresult)
 
