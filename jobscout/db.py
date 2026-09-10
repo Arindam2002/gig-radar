@@ -119,6 +119,14 @@ CREATE TABLE IF NOT EXISTS study_publish (
     content_hash    TEXT
 );
 
+CREATE TABLE IF NOT EXISTS study_prereq_overrides (
+    slug            TEXT,
+    prereq          TEXT,
+    action          TEXT,
+    created_at      TEXT,
+    PRIMARY KEY (slug, prereq)
+);
+
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER);
 """
 
@@ -581,3 +589,63 @@ def publish_map(conn: sqlite3.Connection) -> dict:
                         "content_hash": r["content_hash"]}
             for r in conn.execute(
                 "SELECT slug, reviewed_at, content_hash FROM study_publish")}
+
+
+# ── study prerequisite overrides (your corrections to the DAG) ──────
+# The routine proposes `prereqs` in a topic's frontmatter and rewrites that
+# file every day, so a correction made in the file would not survive the
+# night. A correction made here does. One row per (topic, prerequisite)
+# pair, carrying "add" or "remove"; jobscout.concepts reads them as
+# frontmatter minus the removes plus the adds.
+
+OVERRIDE_ACTIONS = ("add", "remove")
+
+_STUDY_PREREQ_OVERRIDES_DDL = """
+CREATE TABLE IF NOT EXISTS study_prereq_overrides (
+    slug TEXT, prereq TEXT, action TEXT, created_at TEXT,
+    PRIMARY KEY (slug, prereq));
+"""
+
+
+def ensure_study_prereq_overrides(conn: sqlite3.Connection):
+    """The dashboard opens the DB with connect(), not init_db(), so a DB
+    created before this table existed gets it on first use."""
+    conn.executescript(_STUDY_PREREQ_OVERRIDES_DDL)
+
+
+def add_override(conn: sqlite3.Connection, slug: str, prereq: str, action: str):
+    """Record "this topic does (not) need that one". A pair can only say one
+    thing at a time, so a second call replaces the first."""
+    if action not in OVERRIDE_ACTIONS:
+        raise ValueError(f"action must be one of {OVERRIDE_ACTIONS}, not {action!r}")
+    slug, prereq = (slug or "").strip(), (prereq or "").strip()
+    if not slug or not prereq:
+        raise ValueError("an override needs both a topic and a prerequisite")
+    if slug == prereq:
+        raise ValueError("a topic cannot be its own prerequisite")
+    ensure_study_prereq_overrides(conn)
+    conn.execute(
+        "INSERT INTO study_prereq_overrides (slug, prereq, action, created_at) "
+        "VALUES (?, ?, ?, ?) ON CONFLICT(slug, prereq) DO UPDATE SET "
+        "action=excluded.action, created_at=excluded.created_at",
+        (slug, prereq, action, now_iso()))
+    conn.commit()
+
+
+def clear_override(conn: sqlite3.Connection, slug: str, prereq: str):
+    """Forget the correction; the frontmatter has the last word again."""
+    ensure_study_prereq_overrides(conn)
+    conn.execute("DELETE FROM study_prereq_overrides WHERE slug=? AND prereq=?",
+                 (slug, prereq))
+    conn.commit()
+
+
+def overrides_map(conn: sqlite3.Connection) -> dict:
+    """{slug: {prereq: action}} for every correction on record."""
+    ensure_study_prereq_overrides(conn)
+    out: dict = {}
+    for r in conn.execute(
+            "SELECT slug, prereq, action FROM study_prereq_overrides "
+            "ORDER BY slug, prereq"):
+        out.setdefault(r["slug"], {})[r["prereq"]] = r["action"]
+    return out
