@@ -339,3 +339,59 @@ def test_the_settled_layout_is_published_separately_from_the_live_one():
     is what the e2e tests measure and what the drawing is framed around."""
     assert '"data-x0": S[i].x' in mapview._JS
     assert '"data-y0": S[i].y' in mapview._JS
+
+
+# ── B3b: what makes a hundred and eighteen names readable ───────────
+# The layout itself is e2e territory (tests/e2e asserts on rendered pixels
+# against a fixture built to the real base's density). What is worth pinning
+# down here is the handful of decisions that were the difference between 418
+# overlapping labels and none, each of which is one careless edit from being
+# undone and none of which is visible until you open concept mode on a real
+# study base.
+
+def test_labels_are_separated_by_their_boxes_not_their_circles():
+    """The whole diagnosis of B3's failure. A concept is a six-pixel dot with
+    a hundred-pixel name attached; separating the dots leaves the names on
+    top of each other, and no amount of label-dodging afterwards can fix a
+    layout that never made room."""
+    js = mapview._JS
+    assert "function settleSats()" in js
+    assert "hyE[i] = Math.max" in js and "lw[i]" in js, \
+        "the satellite settle has to reserve the label's width and height"
+    # and the hubs still cannot be shoved by a satellite
+    assert "if (!wi && !wj) continue" in js
+    assert "const wi = isC[i] ? 1 : 0, wj = isC[j] ? 1 : 0" in js
+
+
+def test_a_label_has_four_sides_and_an_ellipsis_of_last_resort():
+    js = mapview._JS
+    # right, left, above, below - the four seats, then offsets up and down
+    assert "const out = [[pref, 0], [other, 0], [2, 0], [3, 0]]" in js
+    assert "const CH = 6.2, LPAD = 10, LH = 12, SATF = 0.9, CUT = 18" in js
+    assert "text[i] = cut(fullText[i], limit)" in js
+
+
+def test_a_concept_name_is_drawn_smaller_and_a_topic_name_heavier():
+    assert "SATF" in mapview._JS
+    assert "jsm-label-h" in mapview._JS
+    assert ".jsm-label.jsm-label-h" in mapview._CSS
+    assert ".jsm-label.jsm-label-c" in mapview._CSS
+
+
+def test_the_fit_is_redone_when_the_element_changes_width():
+    """The bug behind the letterboxed screenshot: a component can mount
+    before its column has a width, and the old code then sized the whole
+    drawing - font, seats, canvas height, viewBox - for a 700px canvas it
+    never landed in. The width is now asked of the first ancestor that has
+    one, and the fit is redone if a different one turns up later."""
+    js = mapview._JS
+    assert "function measureW()" in js
+    assert "ResizeObserver" in js and "ro.disconnect()" in js
+    assert "function relayout()" in js
+
+
+def test_a_concept_does_not_breathe_on_its_own_account():
+    """Two names seated a pixel apart and wandering independently will crawl
+    across each other; a cluster that drifts as one thing cannot."""
+    assert "ax: isC[i] ? 0 : 2.0 + 1.6 * w()" in mapview._JS
+    assert "cx += PH[h].x + offX(PH[h])" in mapview._JS

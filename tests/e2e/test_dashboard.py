@@ -1,4 +1,5 @@
 """Playwright E2E against the seeded dashboard (see conftest.seed for data)."""
+import math
 import os
 import re
 import socket
@@ -8,7 +9,11 @@ import threading
 import time
 from pathlib import Path
 
-from conftest import ROOT, db_conn, goto_page, job_status
+from conftest import PORT as E2E_PORT, ROOT, db_conn, goto_page, job_status
+
+# the legibility gate runs a second dashboard of its own; keep it off the
+# suite's port and off 8596, which is where the real-base measurement runs
+DENSE_PORT = E2E_PORT - 1
 
 
 def test_nav_and_refresh_button(dash, server):
@@ -883,6 +888,25 @@ def _labels(page):
     })""")
 
 
+def _label_overlaps(boxes, thresh):
+    """Every pair of label boxes biting more than `thresh` px into each other.
+
+    The bar is stated as a count rather than as a worst case: one pair at
+    3px is a blemish, four hundred of them is a map you cannot read, and
+    only the count tells those apart.
+    """
+    out = []
+    for i in range(len(boxes)):
+        _, x1, y1, w1, h1 = boxes[i]
+        for j in range(i + 1, len(boxes)):
+            _, x2, y2, w2, h2 = boxes[j]
+            ox = min(x1 + w1, x2 + w2) - max(x1, x2)
+            oy = min(y1 + h1, y2 + h2) - max(y1, y2)
+            if ox > 0 and oy > 0 and min(ox, oy) > thresh:
+                out.append((boxes[i][0], boxes[j][0], round(min(ox, oy), 2)))
+    return out
+
+
 def _worst_label_overlap(boxes):
     """The deepest any two label boxes bite into each other, and who."""
     worst, who = 0.0, None
@@ -897,12 +921,37 @@ def _worst_label_overlap(boxes):
     return worst, who
 
 
+def _hub_distance_ratios(before, after):
+    """distance(after) / distance(before) for every pair of hubs.
+
+    The B3a promise is that the hub layout is the *same picture* in both
+    modes, which is a statement about the relative geometry rather than about
+    absolute coordinates: a mode that placed the identical drawing a uniform
+    scale and a translation away would still be the same map, and the reader
+    would still find the place they had learned. So what is checked is the
+    shape - every pairwise distance stretched by the same factor - not the
+    numbers. (Concept mode as built does not scale at all, so these ratios
+    come out at 1; the test is written to the criterion, not to the number,
+    so that a later decision to zoom the mode out is not a test failure.)
+    """
+    out = []
+    slugs = sorted(before)
+    for i, a in enumerate(slugs):
+        for b in slugs[i + 1:]:
+            d0 = math.dist(before[a], before[b])
+            d1 = math.dist(after[a], after[b])
+            if d0 > 1e-6:
+                out.append(d1 / d0)
+    return out
+
+
 def test_map_concept_mode_keeps_hub_positions(page, server):
     """B3a. Switching to concepts adds satellites; it does not redraw the
     map. The hubs are settled from the topic-only node set and the topic-only
-    seed, before a satellite exists, so `data-x0`/`data-y0` for every topic
-    has to come out the same in both modes - otherwise the mode reads as a
-    different picture and the reader loses the place they had learned."""
+    seed, before a satellite exists, so the picture the topics make has to be
+    the same one in both modes - identical up to a uniform scale and a
+    translation - or the mode reads as a different map and the reader loses
+    the place they had learned."""
     goto_page(page, server, "/map")
     page.wait_for_selector("circle.jsm-node", timeout=30000)
     before = {s: (x, y) for s, x, y, _ in _map_nodes(page)}
@@ -912,10 +961,9 @@ def test_map_concept_mode_keeps_hub_positions(page, server):
     after = {s: (x, y) for s, x, y, _ in _map_nodes(page)
              if not s.startswith("c:")}
     assert set(after) == set(before), "the topics themselves changed"
-    for slug, (x1, y1) in before.items():
-        x2, y2 = after[slug]
-        assert abs(x1 - x2) <= 1 and abs(y1 - y2) <= 1, \
-            f"{slug} moved {x1 - x2:.2f},{y1 - y2:.2f} between modes"
+    ratios = _hub_distance_ratios(before, after)
+    assert ratios and max(ratios) / min(ratios) <= 1.02, \
+        f"the hub layout is not the same shape: ratios {ratios}"
 
     # ...and back again, so the mode is a view and not a one-way door
     _map_mode(page, "Topics")
@@ -972,47 +1020,86 @@ def test_map_concept_mode_nodes_and_arrows(page, server):
 
 # The legibility gate. Everything above this line is checked against the two
 # fixture topics, which prove correctness and prove nothing about whether a
-# real study base drawn this way is readable. The dense fixture is built here
-# rather than in conftest on purpose: every other test in this file counts
-# the two demo topics, and a shared fixture that grew to seventy-five nodes
-# would rewrite most of them.
-
-_DENSE_BASES = ["query planner", "cache eviction", "batch window",
-                "index scan", "retry budget"]
-_DENSE_SHARED = ["shared alpha idea", "shared beta idea", "shared gamma idea"]
+# real study base drawn this way is readable - B3 passed a gate built on a
+# synthetic 75-node fixture and then arrived on the real base with 418
+# overlapping label pairs on it.
+#
+# So the fixture is built to the real base's shape rather than to a round
+# number: fourteen topics, twelve of them naming eight to ten concepts and
+# two (the resume drills) naming none, a hundred and four canonical concepts
+# of which ten are shared - nine by two topics and one by three - forty-two
+# related edges, ten prerequisites, and names from eight characters up to
+# the twenty-eight a label is cut to. It is built here rather than in
+# conftest on purpose: every other test in this file counts the two demo
+# topics, and a shared fixture this size would rewrite most of them.
+_DENSE_ADJ = ["hot", "cold", "keyed", "layered", "deferred", "federated",
+              "monotonic", "hierarchical", "unsynchronized", "canonical",
+              "elastic", "buffered", "granular", "immutable"]
+_DENSE_NOUN = ["page", "quorum", "gateway", "snapshot", "partition",
+               "throttle", "checkpoint", "reconciliation"]
+# Every name is two tokens out of a product, so no two of them normalise to
+# the same concept and none is a near-duplicate of another (see
+# jobscout.concepts.near_duplicate). "hot page" is 8 characters and
+# "unsynchronized reconciliation" is 29, which the map cuts to 28.
+_DENSE_NAMES = [f"{a} {b}" for a in _DENSE_ADJ for b in _DENSE_NOUN]
 _DENSE_TRACKS = ["dsa", "backend", "system-design", "llm-infra"]
-# 8 prerequisites, several of them on pairs that are also `related`, which is
-# the shape the real base has
-_DENSE_PREREQS = {2: [1], 3: [2], 4: [2], 6: [5], 7: [5],
-                  9: [8], 10: [9], 12: [11]}
+# the real base's depth range, topic by topic - two of them have never asked
+# you anything and draw at the minimum radius
+_DENSE_QS = [4, 4, 4, 4, 4, 4, 5, 7, 7, 9, 9, 10, 0, 0]
+# how many concepts each topic names; the last two name none at all
+_DENSE_COUNT = [8, 9, 9, 9, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0]
+# ten prerequisites, several of them on pairs that are also `related`, which
+# is the shape the real base has
+_DENSE_PREREQS = {2: [1], 3: [2], 4: [2], 6: [5], 7: [5], 9: [8], 10: [9],
+                  12: [11], 13: [1, 4]}
+
+
+def _dense_concepts():
+    """{topic number: [concept name, ...]} at the real base's density.
+
+    Ten names are shared - nine of them by a pair of topics and one by three
+    - and the other ninety-four are named by exactly one topic, which is the
+    hubs-per-concept histogram the real base has: {1: 94, 2: 9, 3: 1}.
+    """
+    shared, solo = _DENSE_NAMES[:10], _DENSE_NAMES[10:]
+    out = {t: [] for t in range(1, 15)}
+    for i in range(9):                       # (1,2), (2,3), ... (9,10)
+        out[i + 1].append(shared[i])
+        out[i + 2].append(shared[i])
+    for t in (10, 11, 12):                   # the one idea three topics share
+        out[t].append(shared[9])
+    nxt = 0
+    for t in range(1, 15):
+        while len(out[t]) < _DENSE_COUNT[t - 1]:
+            out[t].append(solo[nxt])
+            nxt += 1
+    assert nxt == 94, nxt
+    return out
 
 
 def _dense_study(root: Path):
-    """12 topics, 6 concepts each, 3 of those shared four ways, 8 prereqs.
-
-    63 canonical concepts and 75 nodes - about five times the study base's
-    present size, which is the point: concept mode has to survive the map it
-    will be looked at on in a year, not the one it was built against.
-    """
+    """14 topics, 104 canonical concepts, 118 nodes: the real base's shape."""
     study = root / "study"
     (study / "topics").mkdir(parents=True)
     (study / "STUDY.md").write_text("# Study Base\n\ndense fixture\n")
-    for t in range(1, 13):
+    names = _dense_concepts()
+    for t in range(1, 15):
         slug = f"dense-topic-{t:02d}"
-        names = [f"{b} {t:02d}" for b in _DENSE_BASES]
-        names.append(_DENSE_SHARED[(t - 1) // 4])
-        related = [f"dense-topic-{t + 1:02d}"] if t < 12 else []
+        related = [f"dense-topic-{(t + d - 1) % 14 + 1:02d}" for d in (1, 2, 4)]
         prereqs = [f"dense-topic-{p:02d}" for p in _DENSE_PREREQS.get(t, [])]
-        questions = 2 + (t % 9)              # the real 2..10 depth range
+        questions = _DENSE_QS[t - 1]
         body = "\n".join(
             f"**Q{i}. What does dense topic {t:02d} ask you at step {i}?**\n\n"
             f"Answer {i} for topic {t:02d}.\n" for i in range(1, questions + 1))
+        # a title long enough to be cut to the 28 characters a label gets,
+        # which is where every one of the real base's topic names lands
         (study / "topics" / f"{slug}.md").write_text(
             f"---\ntrack: {_DENSE_TRACKS[(t - 1) % 4]}\ntags: [dense]\n"
             f"related: {related}\n"
-            f"concepts: {names}\nprereqs: {prereqs}\n"
+            f"concepts: {names[t]}\nprereqs: {prereqs}\n"
             f"created: 2026-01-01\nupdated: 2026-01-02\n---\n"
-            f"# Dense topic {t:02d}\n\n## Q&A\n\n{body}\n")
+            f"# Dense topic {t:02d}: partitioning, quorums and replay\n\n"
+            f"## Q&A\n\n{body}\n")
     return study
 
 
@@ -1053,32 +1140,48 @@ def _dense_server(root: Path, port: int):
 def test_map_concept_mode_is_legible(page, tmp_path):
     """B3c, and the whole reason this mode was allowed to be cancelled.
 
-    Correctness was never the risk here - seventy-five circles and a hundred
-    and forty lines is easy to draw and easy to draw unreadably. Three things
-    are measured on the dense fixture, and if any of them had failed the mode
-    would have shipped disabled:
+    Correctness was never the risk here - a hundred and eighteen circles and
+    a hundred and sixty-nine lines is easy to draw and easy to draw
+    unreadably. Four things are measured on a fixture built to the real
+    base's density, and if any of them had failed the mode would have
+    shipped behind a flag:
 
+      * no two names sit on top of each other. Dodging circles is not enough
+        once labels outnumber circles five to one, and neither is dodging
+        labels: what has to be separated is the label *boxes*, in the layout,
+        before a seat is ever chosen.
       * every name is still big enough to read. The viewBox is fitted to the
         drawing, so a bigger graph is a more zoomed-out one, and an 11px
         label on a map this size would arrive on screen at four. The font is
         specified in layout units scaled by however far the drawing shrank.
-      * no two names sit on top of each other. Dodging circles is not enough
-        once labels outnumber them five to one.
       * the frame loop still keeps time.
+      * the canvas is the size the drawing needs, and the drawing is not
+        floating in two bands of empty inside it.
     """
-    proc, url = _dense_server(tmp_path, 8596)
+    proc, url = _dense_server(tmp_path, DENSE_PORT)
     try:
         page.goto(url + "/map")
         page.wait_for_timeout(2500)
         page.wait_for_selector("circle.jsm-node", timeout=30000)
+        topic_mode = {s: (x, y) for s, x, y, _ in _map_nodes(page)}
         _map_mode(page, "Concepts")
         page.wait_for_timeout(2500)
 
+        # B3a with enough hubs for it to mean something: ninety-one pairwise
+        # distances, all stretched by the same factor
+        concept_mode = {s: (x, y) for s, x, y, _ in _map_nodes(page)
+                        if not s.startswith("c:")}
+        ratios = _hub_distance_ratios(topic_mode, concept_mode)
+        assert len(ratios) == 91, len(ratios)
+        assert max(ratios) / min(ratios) <= 1.02, \
+            f"the hub layout changed shape between modes: " \
+            f"{min(ratios):.4f}..{max(ratios):.4f}"
+
         sats = page.locator("circle.jsm-node[data-kind='concept']").count()
         hubs = page.locator("circle.jsm-node[data-kind='topic']").count()
-        assert hubs == 12, hubs
-        assert sats == 63, f"12 topics x 6 concepts with 3 shared 4 ways: {sats}"
-        assert page.locator("line.jsm-prereq").count() == 8
+        assert hubs == 14, hubs
+        assert sats == 104, f"104 canonical concepts, 10 of them shared: {sats}"
+        assert page.locator("line.jsm-prereq").count() == 10
 
         boxes = _labels(page)
         assert len(boxes) == hubs + sats
@@ -1088,6 +1191,9 @@ def test_map_concept_mode_is_legible(page, tmp_path):
             f"unreadable labels (min {heights[0]:.2f}px): {smallest[:3]}"
 
         worst, who = _worst_label_overlap(boxes)
+        over = _label_overlaps(boxes, 2.0)
+        assert not over, \
+            f"{len(over)} label pairs overlap by more than 2px: {over[:3]}"
         assert worst <= 2.0, f"labels overlap by {worst:.2f}px: {who}"
 
         # the frame loop, sampled from the page's own requestAnimationFrame
@@ -1105,18 +1211,22 @@ def test_map_concept_mode_is_legible(page, tmp_path):
         assert gap < 20, f"the map runs at {gap:.1f}ms a frame"
 
         # the canvas grows with the crowd - 560px at fourteen nodes, up to
-        # 900 - and then shrinks back to whatever the drawing actually needs,
-        # so a wide graph is not two bands of empty with a map between them
+        # 900 - and is then the size the drawing actually needs, so a wide
+        # graph is not two bands of empty with a map between them
         shape = page.eval_on_selector("svg.jsm-svg", """e => {
           const b = e.getBoundingClientRect()
           const v = e.viewBox.baseVal
+          const s = Math.min(b.width / v.width, b.height / v.height)
           return [b.width, b.height, e.getAttribute("viewBox"),
-                  Math.min(b.width / v.width, b.height / v.height) * v.height]
+                  s * v.height, s * v.width]
         }""")
         assert 560 < shape[1] <= 900, f"the canvas did not grow: {shape}"
+        # on both axes: a drawing that grew into a tall ribbon wastes the
+        # width just as surely as a wide one wastes the height
         assert shape[1] - shape[3] < 24, f"the drawing is letterboxed: {shape}"
+        assert shape[0] - shape[4] < 24, f"the drawing is letterboxed: {shape}"
 
-        print(f"\nB3c on 12 topics + {sats} concepts: label height "
+        print(f"\nB3c on 14 topics + {sats} concepts: label height "
               f"{heights[0]:.2f}..{heights[-1]:.2f}px, worst label overlap "
               f"{worst:.2f}px, frame interval {gap:.2f}ms, canvas "
               f"{shape[0]:.0f}x{shape[1]:.0f} viewBox {shape[2]}")

@@ -20,6 +20,10 @@ __pycache__/
 # node tooling lands later (diagram export); its deps never get committed
 node_modules/
 
+# the map's legibility gate writes the canvas out so a human can look at
+# it; the numbers are the test, the picture is for the reader
+tests/e2e/.map-concepts*.png
+
 # os / editor
 .DS_Store
 .idea/

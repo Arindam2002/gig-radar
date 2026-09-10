@@ -56,19 +56,44 @@ service of it: **the topics do not move.** So the layout runs in two passes.
   runs, on an array that has never heard of a satellite. A prerequisite is
   drawn but never pulls, because a spring on a prerequisite would slide every
   topic on the canvas the moment you switched modes.
-* The satellites are then placed around the settled hubs and separated
-  against each other and against the hubs, one-way: a hub is never shoved by
-  a satellite. Live, they are carried rather than simulated - a satellite's
-  position is its hubs' position plus the offset the settle gave it, so a
-  drag ripples out to the concepts and nothing can jostle a hub.
+* The satellites are then settled around the fixed hubs: pulled home toward
+  the topic that names them, pushed off each other and off the hubs, one-way
+  - a hub is never shoved by a satellite. Live, they are carried rather than
+  simulated: a satellite's position is its hubs' position plus the offset the
+  settle gave it, so a drag ripples out to the concepts and nothing can
+  jostle a hub, and a hub's whole cluster breathes as one thing.
 
-Two things scale with the crowd, because seventy-five nodes is a different
-drawing from fourteen. The canvas grows (560px, up to 900, then shrunk back
-to whatever the drawing actually needs so a wide graph is not two bands of
-empty). And the labels, which used to dodge circles only, now take the first
-free seat among the labels already placed - preferred side, other side, or a
-few pixels up or down - at a font size scaled by however far the drawing had
-to shrink, so a name is the same size to read at any density.
+**What is packed is the names, not the dots.** That is the one thing the
+first cut of this mode got wrong, and it failed on the real study base by a
+mile: a concept is a six-pixel circle with a hundred-pixel name attached, so
+separating the circles leaves the names lying across each other and no
+amount of label-dodging afterwards can rescue a layout that never made room.
+The satellite settle therefore separates *label boxes* - roughly 6.2 units a
+character by twelve tall - and pushes an overlapping pair apart along
+whichever axis they overlap least, which for a box that wide is nearly always
+the vertical one, so a topic's concepts stack into a column you can read.
+
+The rest follows from the element the drawing has to live in:
+
+* The canvas is the height the drawing needs, up to 900px, and the viewBox is
+  the box the drawing actually occupies - labels included - so neither axis
+  is two bands of empty with a map between them. When the layout comes out
+  taller than the element, the settle is turned toward the horizontal and run
+  again, until the drawing is the shape of the box.
+* The font is specified in layout units scaled by however far the drawing had
+  to shrink, so a name is the same size to read at any density; a concept's
+  name is a size down from a topic's, and a topic's carries the weight.
+* Each name takes the first free seat out of right, left, above, below and a
+  few label-heights up or down, measured against every other label and every
+  circle, with repair sweeps afterwards because a greedy pass only ever knows
+  what was free *so far*. A name that still has nowhere to sit is cut to
+  eighteen characters, then to twelve - the concepts first, and hard, before
+  a topic loses a character - and if it still has nowhere to sit, its dot is
+  nudged clear and everybody is re-seated.
+
+All of that is derived from the element's width, which a component does not
+reliably know at mount: the width is asked of the first ancestor that has
+one, and a `ResizeObserver` redoes the fit when a different one turns up.
 """
 from __future__ import annotations
 
@@ -378,6 +403,9 @@ _CSS = """
   stroke-width: 3px; stroke-linejoin: round; stroke-opacity: .85;}
 /* a concept name is a caption on a topic, not a peer of one */
 .jsm-label.jsm-label-c {fill-opacity: .62;}
+/* and in concept mode a topic name is the thing you read first, so it keeps
+   the weight the satellites do not get */
+.jsm-label.jsm-label-h {font-weight: 620; fill-opacity: .95;}
 .jsm-tip {position: absolute; z-index: 60; pointer-events: none;
   max-width: 280px; padding: 7px 10px; border-radius: 10px; font-size: .78rem;
   line-height: 1.45; color: var(--st-text-color, #d7dce5);
@@ -622,82 +650,399 @@ export default function (component) {
   }
 
   // ── pass two: the satellites ──
-  // Every concept sits on a ring around the topic that names it, or at the
-  // centre of gravity of all of them when several do - which is the one
-  // thing this mode exists to show. The ring is taller than it is wide
-  // because a name is a wide, short thing and what two names need from each
-  // other is vertical room.
+  // The hubs are finished and will not move again. What is left is to find
+  // every concept a seat near the topic that names it - and this is where
+  // the first cut of concept mode went wrong: it reserved the room a
+  // satellite's six-pixel *circle* needs. A satellite is a dot with a
+  // hundred-pixel name attached, so the thing being packed is the label
+  // box, and that is what the separation pass below separates.
   const S = new Array(n)
   HB.forEach((gi, i) => { S[gi] = SH[i] })
   const satRef = {}                    // satellite -> hubs it hangs off
-  if (ns) {
-    const total = {}, used = {}
-    for (const gi of ST) {
-      const hs = (nodes[gi].hubs || []).filter((s) => hpos[s] !== undefined)
-      if (hs.length === 1) total[hs[0]] = (total[hs[0]] || 0) + 1
+
+  // Concept mode is drawn at the same scale as topic mode: K = 1. A uniform
+  // blow-up of the hub layout was the obvious way to make room and it buys
+  // exactly nothing, because the viewBox is fitted to the drawing and the
+  // font is then scaled by however far the drawing had to shrink - scale the
+  // layout by K and the fit divides it straight back out, leaving every
+  // name the same size against the same gap. What is actually scarce is the
+  // element: elW by 900 pixels of screen, and the only way to fit a hundred
+  // and eighteen names into it is to pack them by their boxes, use the whole
+  // height, and shorten the ones that still will not sit down.
+  const anchors = {}                   // satellite -> where it hangs
+  const groupN = {}                    // hub set -> how many hang there
+  for (const gi of ST) {
+    const hs = (nodes[gi].hubs || []).filter((s) => hpos[s] !== undefined)
+    const seats = hs.length ? hs.map((s) => hpos[s]) : [0]
+    let ax = 0, ay = 0, r = 0
+    for (const h of seats) { ax += SH[h].x; ay += SH[h].y; r = Math.max(r, SH[h].r) }
+    const key = seats.join(",")
+    groupN[key] = (groupN[key] || 0) + 1
+    anchors[gi] = { seats, key, r: seats.length > 1 ? 6 : r,
+                    ax: ax / seats.length, ay: ay / seats.length }
+  }
+
+  // ── what a name takes up ──
+  // 6.2 units a character by 12 tall, which is close enough at this font not
+  // to be worth measuring. A concept's name is drawn a size down from a
+  // topic's - it is a caption on a topic, not a peer of one - and `FS`
+  // scales the lot by however far the drawing had to shrink, so a name is
+  // the same size to read at any density.
+  const CH = 6.2, LPAD = 10, LH = 12, SATF = 0.9, CUT = 18
+  const MIN_LABEL_PX = 11, M = 26, DRIFT = 6
+  const fullText = nodes.map((nd) => nd.label || nd.slug)
+  const text = fullText.slice()
+  const lw = new Float64Array(n), lh = new Float64Array(n)
+  const lx = new Float64Array(n), ly = new Float64Array(n)
+  const anc = new Uint8Array(n)        // 0 start, 1 end, 2 middle
+  const side = new Uint8Array(n)       // which way the reserved box points
+  let FS = 1, elH = HBUDGET, elW = 700
+  // Which way a jammed pair is pushed apart shapes the whole drawing: all
+  // vertical and it grows into a tall ribbon with the canvas empty either
+  // side of it, all horizontal and it grows into a band. VB tilts that
+  // choice, and the fit below turns it until the drawing is the shape of
+  // the element it has to live in.
+  let VB = 1
+  const fsOf = (i) => FS * (isC[i] ? SATF : 1)
+  const cut = (t, k) =>
+    t.length <= k ? t : t.slice(0, k - 1).replace(/\\s+$/, "") + "\\u2026"
+  function metrics() {
+    for (let i = 0; i < n; i++) {
+      lw[i] = (text[i].length * CH + LPAD) * fsOf(i)
+      lh[i] = LH * fsOf(i)
     }
-    for (const gi of ST) {
-      const hs = (nodes[gi].hubs || []).filter((s) => hpos[s] !== undefined)
-      const seats = hs.map((s) => hpos[s])
-      let ax = CX, ay = CY
-      if (seats.length === 1) {
-        const hp = SH[seats[0]], many = total[hs[0]] || 1
-        const k = used[hs[0]] = (used[hs[0]] || 0) + 1
-        // the first seat is hashed from the slug, so a hub's satellites do
-        // not all start at three o'clock and lean the same way
-        const a0 = (hash32(hs[0]) % 997) / 997 * TAU
-        const ang = a0 + TAU * (k - 1) / many
-        const rx = hp.r + 30 + many * 3
-        ax = hp.x + rx * Math.cos(ang)
-        ay = hp.y + rx * 1.3 * Math.sin(ang)
-      } else if (seats.length) {
-        for (const h of seats) { ax += SH[h].x; ay += SH[h].y }
-        ax = (ax - CX) / seats.length; ay = (ay - CY) / seats.length
-        const w = mulberry32(hash32(nodes[gi].slug))
-        const ang = TAU * w(), rad = 12 + 16 * w()
-        ax += rad * Math.cos(ang); ay += rad * Math.sin(ang)
+  }
+
+  // The element's width, asked of the first ancestor that has one. A
+  // component can mount before the browser has laid its column out, and the
+  // old code's `|| 700` fallback then sized the whole drawing for a canvas
+  // 15% narrower than the one it landed in - which is how a map ends up
+  // letterboxed into two bands of empty. `relayout` below is the other half
+  // of the answer: when a real width does arrive, the fit is simply redone.
+  function measureW() {
+    let e = svg
+    for (let hop = 0; e && hop < 5; hop++) {
+      const w = e.getBoundingClientRect().width
+      if (w > 1) return w
+      e = e.parentElement
+    }
+    return 700
+  }
+
+  // ── the satellite settle ──
+  // Satellites repel each other and the hubs, and are pulled back toward the
+  // topic that names them (or toward the centre of gravity of all of them,
+  // when several do - which is the one thing this mode exists to show).
+  // Hubs are fixed: a satellite is never allowed to shove one, which is what
+  // carries the hub layout through the second pass intact.
+  //
+  // Two boxes that overlap are pushed apart along whichever axis they
+  // overlap *least*. For a box a hundred units wide and fifteen tall that is
+  // nearly always the vertical one, so a hub's concepts stack into a column
+  // you can read down instead of a smear you cannot read at all.
+  const hyE = new Float64Array(n), hlE = new Float64Array(n), hrE = new Float64Array(n)
+  function extents() {
+    for (let i = 0; i < n; i++) {
+      const r = S[i].r
+      const w = r + 7 + lw[i]
+      if (isC[i]) {
+        hyE[i] = Math.max(r, lh[i] * 0.62) + lh[i] * 0.6
+        if (side[i]) { hlE[i] = r + 2; hrE[i] = w } else { hlE[i] = w; hrE[i] = r + 2 }
+      } else {
+        // a hub reserves both sides and a line's clearance above and below.
+        // There are fourteen of them against a hundred satellites, so the
+        // room is cheap - and a topic's name is the one the reader steers by,
+        // so it is the one that must not have to go looking for a seat.
+        hyE[i] = Math.max(r, lh[i] * 0.62) + lh[i] * 1.35
+        hlE[i] = w; hrE[i] = w
       }
-      S[gi] = { x: ax, y: ay, vx: 0, vy: 0, r: nodes[gi].r || 6, fixed: false,
-                seats: seats.length ? seats : [0] }
     }
-    // Separation, and separation only. Satellites shove each other and are
-    // shoved out of hubs; a hub is never shoved by a satellite, which is how
-    // the hub layout survives the second pass intact. They are separated at
-    // more than their own width so their labels start with room, and the
-    // label pass below only has to fix what is left.
-    const SPACE = 30
-    function sepSats(k) {
+  }
+  const sweepOrd = new Array(n)
+  function settleSats() {
+    if (!ns) return
+    const used = {}
+    for (const gi of ST) {
+      const a = anchors[gi], many = groupN[a.key]
+      const k = used[a.key] = (used[a.key] || 0) + 1
+      // the first seat is hashed from the hub set, so a topic's concepts do
+      // not all start at three o'clock and lean the same way
+      const a0 = (hash32(a.key) % 997) / 997 * TAU
+      const ang = a0 + TAU * (k - 0.5) / many
+      const rad = a.r + 16 + many * 2
+      S[gi] = { x: a.ax + rad * Math.cos(ang), y: a.ay + rad * 0.7 * Math.sin(ang),
+                vx: 0, vy: 0, r: nodes[gi].r || 6, fixed: false, seats: a.seats }
+    }
+    let mid = 0
+    for (let i = 0; i < n; i++) mid += S[i].x
+    mid /= n
+    for (const gi of ST) side[gi] = S[gi].x >= anchors[gi].ax ? 1 : 0
+    for (const gi of HB) side[gi] = S[gi].x >= mid ? 1 : 0
+    for (let i = 0; i < n; i++) sweepOrd[i] = i
+    for (let it = 0; it < 420; it++) {
+      // home again: a concept that has been pushed away drifts back toward
+      // the topic it belongs to, so the clusters stay legible as clusters
+      for (const gi of ST) {
+        const a = anchors[gi], p = S[gi]
+        const dx = a.ax - p.x, dy = a.ay - p.y
+        const d = Math.hypot(dx, dy) || 1
+        const rest = a.r + 14
+        if (d > rest) {
+          const s = Math.min(1.4, (d - rest) * 0.18)
+          p.x += (dx / d) * s; p.y += (dy / d) * s
+        }
+      }
+      if ((it % 24) === 0) {
+        for (const gi of ST) side[gi] = S[gi].x >= anchors[gi].ax ? 1 : 0
+      }
+      extents()
+      let maxHY = 0
+      for (let i = 0; i < n; i++) if (hyE[i] > maxHY) maxHY = hyE[i]
+      // a sweep down the y axis: two boxes fifteen units tall a hundred
+      // apart cannot touch, and skipping those pairs is what keeps an
+      // O(n^2) settle cheap enough to run four times before the first paint
+      sweepOrd.sort((a, b) => S[a].y - S[b].y || a - b)
+      for (let ii = 0; ii < n; ii++) {
+        const i = sweepOrd[ii]
+        for (let jj = ii + 1; jj < n; jj++) {
+          const j = sweepOrd[jj]
+          const dy = S[j].y - S[i].y
+          if (dy > hyE[i] + maxHY) break
+          const wi = isC[i] ? 1 : 0, wj = isC[j] ? 1 : 0
+          if (!wi && !wj) continue          // two hubs are not our business
+          const oy = hyE[i] + hyE[j] - Math.abs(dy)
+          if (oy <= 0) continue
+          const ox = Math.min(S[i].x + hrE[i], S[j].x + hrE[j]) -
+                     Math.max(S[i].x - hlE[i], S[j].x - hlE[j])
+          if (ox <= 0) continue
+          const tot = wi + wj
+          if (oy * VB <= ox) {
+            const s = (oy + 0.4) / tot, dir = dy >= 0 ? 1 : -1
+            if (wi) S[i].y -= dir * s
+            if (wj) S[j].y += dir * s
+          } else {
+            const s = (ox + 0.4) / tot, dir = S[j].x >= S[i].x ? 1 : -1
+            if (wi) S[i].x -= dir * s
+            if (wj) S[j].x += dir * s
+          }
+        }
+      }
+    }
+    for (const gi of ST) { S[gi].x = r2(S[gi].x); S[gi].y = r2(S[gi].y) }
+  }
+
+  // ── seating the labels ──
+  // Each name takes the first free seat out of "preferred side, other side,
+  // above, below, and a few label-heights up or down", measured against the
+  // labels already seated and against every circle on the canvas. A name
+  // that is still sitting on something after all of that is shortened -
+  // eighteen characters and an ellipsis - and the whole pass is run again,
+  // because a shorter name frees a seat for its neighbours too.
+  // The seat, plus the room the drift needs. Nothing on this canvas is ever
+  // quite still, so two names seated a hair apart will breathe into each
+  // other; DPAD is the couple of pixels of wander that buys back.
+  const DPAD = 2.4
+  function seatBox(i, k, dy) {
+    const r = S[i].r, w = lw[i], h = lh[i], base = 4 * fsOf(i)
+    let x0, yb
+    if (k === 0) { x0 = S[i].x + r + 6; yb = S[i].y + base + dy }
+    else if (k === 1) { x0 = S[i].x - r - 6 - w; yb = S[i].y + base + dy }
+    else if (k === 2) { x0 = S[i].x - w / 2; yb = S[i].y - r - 6 }
+    else { x0 = S[i].x - w / 2; yb = S[i].y + r + 6 + h * 0.82 }
+    return [x0 - DPAD, yb - h * 0.82 - DPAD, x0 + w + DPAD, yb + h * 0.24 + DPAD, yb]
+  }
+  function ov(a, b) {
+    const ox = Math.min(a[2], b[2]) - Math.max(a[0], b[0])
+    const oy = Math.min(a[3], b[3]) - Math.max(a[1], b[1])
+    return (ox > 0 && oy > 0) ? Math.min(ox, oy) : 0
+  }
+  // circles are still obstacles; a name across a node is as unreadable as a
+  // name across another name
+  function hitsCircle(b, i) {
+    let pen = 0
+    for (let j = 0; j < n; j++) {
+      if (j === i) continue
+      const ox = Math.min(b[2], S[j].x + S[j].r) - Math.max(b[0], S[j].x - S[j].r)
+      if (ox <= 0) continue
+      const oy = Math.min(b[3], S[j].y + S[j].r) - Math.max(b[1], S[j].y - S[j].r)
+      if (oy > 0) pen += Math.min(ox, oy)
+    }
+    return pen
+  }
+  const boxes = new Array(n)           // where each name ended up sitting
+  function seat() {
+    for (let i = 0; i < n; i++) text[i] = fullText[i]
+    let mid = 0
+    for (let i = 0; i < n; i++) mid += S[i].x
+    mid /= n
+    for (let pass = 0; pass < 5; pass++) {
+      metrics()
+      // hubs are seated first and satellites dodge them: a topic's name is
+      // the one the reader is navigating by, and it has nowhere else to go
+      const ord = Array.from({ length: n }, (_, i) => i)
+        .sort((a, b) => (isC[a] ? 1 : 0) - (isC[b] ? 1 : 0) ||
+                        (S[a].y - S[b].y) || (S[a].x - S[b].x) || (a - b))
+      // one candidate seat is a side (right, left, above, below) and, for the
+      // two sides, an offset of so many label-heights up or down
+      function seats(i) {
+        const pref = S[i].x >= mid ? 0 : 1, other = 1 - pref
+        const H = lh[i] * 1.2
+        const out = [[pref, 0], [other, 0], [2, 0], [3, 0]]
+        for (let s = 1; s <= 6; s++) {
+          out.push([pref, s * H], [pref, -s * H], [other, s * H], [other, -s * H])
+        }
+        out.pref = pref
+        return out
+      }
+      // what this seat would sit on: the labels already placed, plus every
+      // circle on the canvas. `skip` is the label's own node on a re-seat,
+      // where every other label is already down.
+      function penalty(i, b, placed, skip) {
+        let pen = 0
+        for (const j of placed) {
+          const q = boxes[j]
+          if (j === skip || !q || q[1] > b[3] || q[3] < b[1]) continue
+          pen += ov(b, q)
+        }
+        return pen + hitsCircle(b, i) * 0.7
+      }
+      function place(i, placed, skip) {
+        const cands = seats(i), pref = cands.pref
+        let best = null, bestCost = Infinity, bestPen = Infinity
+        for (const [k, dy] of cands) {
+          const b = seatBox(i, k, dy)
+          const pen = penalty(i, b, placed, skip)
+          const cost = pen * 10 + Math.abs(dy) * 0.05 +
+                       (k === pref ? 0 : k === 1 - pref ? 0.4 : 0.9)
+          if (cost < bestCost) { bestCost = cost; bestPen = pen; best = [b, k, dy] }
+          if (pen === 0 && k === pref && dy === 0) break
+        }
+        const [b, k] = best
+        anc[i] = k === 0 ? 0 : k === 1 ? 1 : 2
+        lx[i] = k === 0 ? S[i].r + 6 : k === 1 ? -(S[i].r + 6) : 0
+        ly[i] = b[4] - S[i].y
+        boxes[i] = b
+        return bestPen
+      }
+      const placed = []
+      for (const i of ord) { place(i, placed, -1); placed.push(i) }
+      // A greedy pass answers "what is free *so far*", which is the wrong
+      // question for everyone seated early. Repair sweeps re-ask it with the
+      // whole picture down, which is what clears the last few - and the
+      // verdict is taken afterwards, against the seats as they finally are,
+      // because a sweep can seat someone onto a name it has already passed.
+      let bad = []
+      for (let rep = 0; rep < 5; rep++) {
+        let hit = 0
+        for (const i of ord) if (place(i, ord, i) > 0.4) hit++
+        bad = []
+        for (const i of ord) if (penalty(i, boxes[i], ord, i) > 0.4) bad.push(i)
+        if (!bad.length || !hit) break
+      }
+      if (!bad.length) return
+      // An ellipsis is worth more than a name you cannot read because
+      // another name is lying across it - but it is spent on the concepts
+      // first, and hard on the concepts, before a topic loses a character.
+      // The topics are what the reader is steering by.
+      const limit = (pass === 0 || pass === 2) ? CUT : 12
+      const hubsToo = pass >= 2
+      let changed = false
+      for (const i of bad) {
+        if ((!hubsToo && !isC[i]) || text[i].length <= limit) continue
+        text[i] = cut(fullText[i], limit); changed = true
+      }
+      if (!changed) return
+    }
+  }
+
+  // A name that *still* has nowhere to sit does not need a shorter name, it
+  // needs its dot moved. A satellite whose label is trapped is nudged clear
+  // along the axis it is trapped on and everybody is re-seated - which is
+  // the one move a fixed layout cannot make for itself, and it is what
+  // clears the last one or two pairs on a really crowded base.
+  function polish() {
+    if (!ns) return
+    for (let round = 0; round < 5; round++) {
       let moved = false
-      for (let i = 0; i < ns; i++) {
-        const pi = S[ST[i]]
-        for (let j = i + 1; j < ns; j++) {
-          const pj = S[ST[j]]
-          let dx = pj.x - pi.x, dy = pj.y - pi.y
-          let d = Math.sqrt(dx * dx + dy * dy)
-          if (d >= SPACE) continue
-          if (d < 1e-6) { dx = 1 + i * 1e-3; dy = j * 1e-3; d = Math.sqrt(dx * dx + dy * dy) }
-          const push = ((SPACE - d) / 2) * k
-          pi.x -= (dx / d) * push; pi.y -= (dy / d) * push
-          pj.x += (dx / d) * push; pj.y += (dy / d) * push
-          moved = true
+      for (const gi of ST) {
+        const b = boxes[gi]
+        if (!b) continue
+        let step = 0, worst = 0
+        for (let j = 0; j < n; j++) {
+          const q = boxes[j]
+          if (j === gi || !q) continue
+          const ox = Math.min(b[2], q[2]) - Math.max(b[0], q[0])
+          if (ox <= 0) continue
+          const oy = Math.min(b[3], q[3]) - Math.max(b[1], q[1])
+          if (oy <= 0) continue
+          const d = Math.min(ox, oy)
+          if (d > worst) {
+            worst = d
+            step = (b[1] + b[3] >= q[1] + q[3] ? 1 : -1) * (oy + 2)
+          }
         }
-        for (let h = 0; h < nh; h++) {
-          const hp = SH[h]
-          let dx = pi.x - hp.x, dy = pi.y - hp.y
-          let d = Math.sqrt(dx * dx + dy * dy)
-          const min = hp.r + pi.r + 12
-          if (d >= min) continue
-          if (d < 1e-6) { dx = 0.7 + i * 1e-3; dy = 0.3 + h * 1e-3; d = Math.sqrt(dx * dx + dy * dy) }
-          pi.x += (dx / d) * (min - d) * k; pi.y += (dy / d) * (min - d) * k
-          moved = true
-        }
+        if (worst > 0.4) { S[gi].y += step; moved = true }
       }
-      return moved
+      if (!moved) return
+      seat()
     }
-    for (let k = 0; k < 300; k++) if (!sepSats(0.6)) break
+  }
+
+  // ── the frame ──
+  // The box the drawing needs, labels included, and the element it is fitted
+  // into.
+  function boxOf(Q, into) {
+    for (let i = 0; i < n; i++) {
+      const x = Q[i].x, y = Q[i].y, r = Q[i].r
+      const x0 = x + lx[i] - (anc[i] === 1 ? lw[i] : anc[i] === 2 ? lw[i] / 2 : 0)
+      const yb = y + ly[i]
+      into[0] = Math.min(into[0], x - r, x0)
+      into[1] = Math.min(into[1], y - r, yb - lh[i] * 0.82)
+      into[2] = Math.max(into[2], x + r, x0 + lw[i])
+      into[3] = Math.max(into[3], y + r, yb + lh[i] * 0.24)
+    }
+    return into
+  }
+  // A crowded concept map is allowed a shorter canvas than the 560 a small
+  // map has always had: a wide, short drawing pinned to 560 is letterboxed,
+  // and two bands of empty with a map between them is the thing this pass
+  // exists to stop. A handful of nodes keeps the old floor.
+  const MINH = (ns && n > 30) ? 340 : 560
+  const fit = (bw, bh) =>
+    Math.max(MINH, Math.min(HBUDGET, Math.round(elW * bh / bw)))
+
+  // FS depends on the frame and the frame depends on FS (a bigger name is a
+  // wider drawing, and in concept mode a wider drawing is also a differently
+  // settled one). Four damped rounds land well inside a pixel; the clamps
+  // are there so a pathological graph cannot chase its own tail.
+  function layout() {
+    elW = measureW()
+    VB = 1
+    for (let round = 0; round < 7; round++) {
+      metrics()
+      settleSats()
+      seat()
+      const b = boxOf(S, [Infinity, Infinity, -Infinity, -Infinity])
+      const bw = (b[2] - b[0]) + 2 * (M + DRIFT)
+      const bh = (b[3] - b[1]) + 2 * (M + DRIFT)
+      elH = fit(bw, bh)
+      const sc = Math.min(elW / bw, elH / bh)
+      const want = Math.min(3.6, Math.max(1, MIN_LABEL_PX / (11 * sc)))
+      // the shape the element wants against the shape the drawing came out;
+      // a drawing taller than its box is one that should have spread sideways
+      const tall = (bh / bw) / (HBUDGET / elW)
+      const vb = Math.min(6, Math.max(0.3, VB * Math.pow(tall, 0.7)))
+      const done = Math.abs(want - FS) < 0.02 &&
+                   (!ns || Math.abs(vb - VB) < 0.04)
+      FS += (want - FS) * 0.85
+      VB += (vb - VB) * 0.7
+      if (done) break
+    }
+    metrics()
+    seat()
+    polish()
     for (const gi of ST) {
       const p = S[gi]
-      p.x = r2(p.x); p.y = r2(p.y)
       let cx = 0, cy = 0
       for (const h of p.seats) { cx += SH[h].x; cy += SH[h].y }
       // what a satellite remembers is its offset from its hubs, so a dragged
@@ -705,7 +1050,14 @@ export default function (component) {
       satRef[gi] = { h: p.seats, dx: p.x - cx / p.seats.length,
                      dy: p.y - cy / p.seats.length }
     }
+    const b = boxOf(S, [Infinity, Infinity, -Infinity, -Infinity])
+    const pad = M + DRIFT
+    svg.style.height =
+      fit((b[2] - b[0]) + pad * 2, (b[3] - b[1]) + pad * 2) + "px"
+    return { x: b[0] - pad, y: b[1] - pad,
+             w: (b[2] - b[0]) + pad * 2, h: (b[3] - b[1]) + pad * 2 }
   }
+  const vbT = layout()
 
   // ── live positions ──
   // A filter change is a new mount with a new node set. Nodes that survived
@@ -730,9 +1082,11 @@ export default function (component) {
     return {
       x: warm ? +q[0] : S[i].x, y: warm ? +q[1] : S[i].y,
       rx: 0, ry: 0, vx: 0, vy: 0, r: S[i].r, fixed: S[i].fixed,
-      lw: 0, right: false, ldy: 0, born: warm ? 1 : 0,
-      hold: 0, hx: 0, hy: 0,
-      ax: 2.0 + 1.6 * w(), ay: 1.8 + 1.6 * w(),
+      born: warm ? 1 : 0, hold: 0, hx: 0, hy: 0,
+      // a concept does not breathe on its own account: it is carried by the
+      // topic that names it, so a hub's whole cluster wanders as one thing
+      // and two names in it can never crawl across each other
+      ax: isC[i] ? 0 : 2.0 + 1.6 * w(), ay: isC[i] ? 0 : 1.8 + 1.6 * w(),
       f1: 0.52 + 0.46 * w(), f2: 0.19 + 0.22 * w(),
       f3: 0.49 + 0.46 * w(), f4: 0.17 + 0.22 * w(),
       p1: TAU * w(), p2: TAU * w(), p3: TAU * w(), p4: TAU * w(),
@@ -747,12 +1101,13 @@ export default function (component) {
     for (const gi of ST) {
       const ref = satRef[gi]
       let cx = 0, cy = 0
-      for (const h of ref.h) { cx += PH[h].x; cy += PH[h].y }
+      for (const h of ref.h) {
+        cx += PH[h].x + offX(PH[h]); cy += PH[h].y + offY(PH[h])
+      }
       P[gi].x = cx / ref.h.length + ref.dx
       P[gi].y = cy / ref.h.length + ref.dy
     }
   }
-  followSats()
   // a hidden tab never runs the loop that grows nodes in, so a map mounted
   // in the background must arrive fully drawn (it would otherwise show only
   // edges until the tab is focused)
@@ -771,6 +1126,7 @@ export default function (component) {
   // a pinned node is parked exactly where it was dropped: no wander either
   const offX = (p) => (still || p.fixed ? 0 : wobX(p) * (1 - p.hold) + p.hx * p.hold)
   const offY = (p) => (still || p.fixed ? 0 : wobY(p) * (1 - p.hold) + p.hy * p.hold)
+  followSats()                         // wants offX/offY: a cluster drifts as one
 
   // The opening. The map arrives a tenth smaller than it is and expands to
   // full size over about a second, which is the "settling" a reader sees on
@@ -790,123 +1146,12 @@ export default function (component) {
     return e
   }
 
-  // ── labels ──
-  // Two problems, solved in one place because they are the same problem.
-  //
-  // The first is size. The viewBox is fitted to the drawing, so a big graph
-  // is a zoomed-out one and an 11px label would land on screen at four. The
-  // font is therefore specified in *layout* units, scaled by however far the
-  // drawing had to shrink, so a name is the same size to read whether there
-  // are two topics on the canvas or a hundred. When the drawing fits at 1:1
-  // or better, which is every small map, FS is exactly 1 and nothing about
-  // the old picture changes.
-  //
-  // The second is collision. Labels used to dodge circles only, which is
-  // fine when a label has fourteen neighbours and hopeless when it has
-  // ninety. Each one now takes the first free seat out of "preferred side,
-  // other side, and a few pixels up or down", measured against the labels
-  // already seated - approximating a name's box as 6.2px per character by
-  // 12px tall, which is close enough at this font not to be worth measuring.
-  const MIN_LABEL_PX = 11, LH = 12, M = 26, DRIFT = 6
-  const elW = svg.getBoundingClientRect().width || 700
-  let elH = HBUDGET
-  let FS = 1
-  // as tall as the drawing needs, never taller than the budget and never
-  // shorter than the 560 the small map has always been
-  const fit = (bw, bh) =>
-    Math.max(560, Math.min(HBUDGET, Math.round(elW * bh / bw)))
-  function labelW(i) { return ((nodes[i].label || nodes[i].slug).length * 6.2 + 10) * FS }
-  function box(Q, into) {
-    for (let i = 0; i < n; i++) {
-      const lx = P[i].right ? Q[i].x + Q[i].r + 6 + P[i].lw
-                            : Q[i].x - Q[i].r - 6 - P[i].lw
-      into[0] = Math.min(into[0], Q[i].x - Q[i].r, lx)
-      into[1] = Math.min(into[1], Q[i].y - Q[i].r, Q[i].y + P[i].ldy - LH * FS)
-      into[2] = Math.max(into[2], Q[i].x + Q[i].r, lx)
-      into[3] = Math.max(into[3], Q[i].y + Q[i].r, Q[i].y + P[i].ldy + LH * FS)
-    }
-    return into
-  }
-  // FS depends on the frame and the frame depends on FS (a bigger name is a
-  // wider drawing). Three passes is well inside a pixel; the clamp is there
-  // so a pathological graph cannot chase its own tail.
-  let sumX = 0
-  for (let i = 0; i < n; i++) sumX += S[i].x
-  const midX = sumX / n
-  for (let i = 0; i < n; i++) { P[i].lw = labelW(i); P[i].right = S[i].x >= midX }
-  for (let pass = 0; pass < 3; pass++) {
-    const b = box(S, [Infinity, Infinity, -Infinity, -Infinity])
-    const bw = (b[2] - b[0]) + 2 * (M + DRIFT), bh = (b[3] - b[1]) + 2 * (M + DRIFT)
-    elH = fit(bw, bh)
-    const sc = Math.min(elW / bw, elH / bh)
-    const want = Math.min(2.6, Math.max(1, MIN_LABEL_PX / (11 * sc)))
-    if (Math.abs(want - FS) < 0.02) break
-    FS = want
-    for (let i = 0; i < n; i++) P[i].lw = labelW(i)
-  }
-  const LHu = LH * FS, LBASE = 4 * FS
-
-  function lbox(i, right, dy) {
-    const x0 = right ? S[i].x + S[i].r + 6 : S[i].x - S[i].r - 6 - P[i].lw
-    const yb = S[i].y + LBASE + dy
-    return [x0, yb - LHu * 0.82, x0 + P[i].lw, yb + LHu * 0.24]
-  }
-  function overlap(a, b) {
-    const ox = Math.min(a[2], b[2]) - Math.max(a[0], b[0])
-    const oy = Math.min(a[3], b[3]) - Math.max(a[1], b[1])
-    return (ox > 0 && oy > 0) ? Math.min(ox, oy) : 0
-  }
-  // circles are still obstacles; a name across a node is as unreadable as a
-  // name across another name
-  function hitsCircle(b, i) {
-    let pen = 0
-    for (let j = 0; j < n; j++) {
-      if (j === i) continue
-      const ox = Math.min(b[2], S[j].x + S[j].r) - Math.max(b[0], S[j].x - S[j].r)
-      const oy = Math.min(b[3], S[j].y + S[j].r) - Math.max(b[1], S[j].y - S[j].r)
-      if (ox > 0 && oy > 0) pen += Math.min(ox, oy)
-    }
-    return pen
-  }
-  const DYS = [0, 8, -8, 16, -16, 24, -24, 33, -33, 43, -43, 54, -54]
-  const seatOrder = Array.from({ length: n }, (_, i) => i)
-    .sort((a, b) => (S[a].y - S[b].y) || (S[a].x - S[b].x) || (a - b))
-  const seated = []
-  for (const i of seatOrder) {
-    let best = null, bestCost = Infinity
-    const sides = P[i].right ? [true, false] : [false, true]
-    for (const dy of DYS) {
-      for (const side of sides) {
-        const b = lbox(i, side, dy)
-        let pen = 0
-        for (const q of seated) {
-          if (q.b[1] > b[3] || q.b[3] < b[1]) continue
-          pen += overlap(b, q.b)
-        }
-        pen += hitsCircle(b, i) * 0.7
-        // a tiny price on moving at all, so a label only leaves its natural
-        // seat when something is actually in it
-        const cost = pen * 10 + Math.abs(dy) * 0.06 +
-                     (side === P[i].right ? 0 : 0.5)
-        if (cost < bestCost) { bestCost = cost; best = { b, side, dy } }
-        if (pen === 0 && dy === 0 && side === P[i].right) { best = { b, side, dy }; bestCost = -1 }
-      }
-      if (bestCost < 0) break
-    }
-    P[i].right = best.side
-    P[i].ldy = best.dy
-    seated.push({ i, b: best.b })
-  }
-
   // The frame is the settled layout plus room for the drift. When nodes are
   // sliding in from an older, wider picture the box starts around both and
   // eases down to the settled one, so nothing is ever clipped mid-move.
-  const bS = box(S, [Infinity, Infinity, -Infinity, -Infinity])
-  const bNow = box(P, bS.slice())
   const pad = M + DRIFT
-  svg.style.height = fit((bS[2] - bS[0]) + pad * 2, (bS[3] - bS[1]) + pad * 2) + "px"
-  const vbT = { x: bS[0] - pad, y: bS[1] - pad,
-                w: (bS[2] - bS[0]) + pad * 2, h: (bS[3] - bS[1]) + pad * 2 }
+  const bNow = boxOf(P, [vbT.x + pad, vbT.y + pad,
+                         vbT.x + vbT.w - pad, vbT.y + vbT.h - pad])
   const vb = still ? Object.assign({}, vbT)
     : { x: bNow[0] - pad, y: bNow[1] - pad,
         w: (bNow[2] - bNow[0]) + pad * 2, h: (bNow[3] - bNow[1]) + pad * 2 }
@@ -985,23 +1230,31 @@ export default function (component) {
       g.appendChild(badgeText)
     }
 
+    // a hub keeps the heavier label in concept mode: with five satellites to
+    // every topic, the topics have to stay the thing you read first
     const label = el("text", {
-      class: "jsm-label" + (isC[i] ? " jsm-label-c" : ""),
-      y: P[i].y + LBASE + P[i].ldy,
-      x: P[i].right ? P[i].x + P[i].r + 6 : P[i].x - P[i].r - 6,
-      "text-anchor": P[i].right ? "start" : "end",
+      class: "jsm-label" + (isC[i] ? " jsm-label-c" : ns ? " jsm-label-h" : ""),
     })
-    // an inline style, not the `font-size` attribute: the stylesheet's own
-    // rule would win over a presentation attribute and undo the scaling
-    if (FS !== 1) {
-      label.style.fontSize = r2(11 * FS) + "px"
-      label.style.strokeWidth = r2(3 * FS) + "px"
-    }
-    label.textContent = nd.label || nd.slug
     g.appendChild(label)
     gNodes.appendChild(g)
     return { g, c, badge, badgeText, label, enter: P[i].born < 1 }
   })
+
+  // The size and the seat are re-derived whenever the element changes width,
+  // so this is a function rather than four attributes written once.
+  function dressLabels() {
+    for (let i = 0; i < n; i++) {
+      const label = parts[i].label
+      // an inline style, not the `font-size` attribute: the stylesheet's own
+      // rule would win over a presentation attribute and undo the scaling
+      const f = fsOf(i)
+      label.style.fontSize = r2(11 * f) + "px"
+      label.style.strokeWidth = r2(3 * f) + "px"
+      label.setAttribute("text-anchor",
+        anc[i] === 0 ? "start" : anc[i] === 1 ? "end" : "middle")
+      if (label.textContent !== text[i]) label.textContent = text[i]
+    }
+  }
 
   // ── render: every frame, node parts and then the edges that hang off them ──
   function render() {
@@ -1033,8 +1286,8 @@ export default function (component) {
         q.badgeText.setAttribute("x", r2(p.rx + p.r * 0.78))
         q.badgeText.setAttribute("y", r2(p.ry - p.r * 0.78 + 3))
       }
-      q.label.setAttribute("x", r2(p.right ? p.rx + p.r + 6 : p.rx - p.r - 6))
-      q.label.setAttribute("y", r2(p.ry + LBASE + p.ldy))
+      q.label.setAttribute("x", r2(p.rx + lx[i]))
+      q.label.setAttribute("y", r2(p.ry + ly[i]))
     }
     for (const { ln, a, b, arrow } of lines) {
       let x1 = P[a].rx, y1 = P[a].ry, x2 = P[b].rx, y2 = P[b].ry
@@ -1143,6 +1396,30 @@ export default function (component) {
   }
   const onVis = () => { if (document.hidden) { stop(); save() } else start() }
 
+  // ── the element changed width ──
+  // The whole fit - the font scale, where every name sits, how tall the
+  // canvas is and what the viewBox frames - is derived from the width of the
+  // element. That width is not known at mount if the browser has not laid
+  // the column out yet, and it changes again whenever the window does, so
+  // the answer is to be able to redo it rather than to guess once.
+  let lastW = elW
+  function relayout() {
+    const w = measureW()
+    if (!(w > 1) || Math.abs(w - lastW) / lastW < 0.02) return
+    lastW = w
+    const box = layout()
+    for (const k in box) { vbT[k] = box[k]; if (still) vb[k] = box[k] }
+    dressLabels()
+    followSats()
+    paintBox()
+    render()
+    reheat(0.2)
+  }
+  const ro = (typeof ResizeObserver === "function")
+    ? new ResizeObserver(relayout) : null
+  if (ro) ro.observe(svg)
+
+  dressLabels()
   render()
   if (!still) { if (!document.hidden) start() } else save()
 
@@ -1319,6 +1596,7 @@ export default function (component) {
   return () => {
     stop()
     save()
+    if (ro) ro.disconnect()
     if (navTimer) clearTimeout(navTimer)
     svg.removeEventListener("mousemove", onOver)
     svg.removeEventListener("mouseleave", onLeave)
