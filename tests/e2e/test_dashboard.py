@@ -420,6 +420,40 @@ def test_study_checklist_tracks_completion(dash, server):
     assert dash.locator("text=0/2 studied >> visible=true").count() >= 1
 
 
+def _learn_card_title(page):
+    """The title on the worksheet's LEARN card. Scoped through the card's own
+    markup rather than a page-wide text match, because both demo topics are
+    also named in the checklist below."""
+    return page.locator(
+        "xpath=//div[contains(@class,'jcard-sub')][contains(.,'LEARN')]"
+        "/following-sibling::div[contains(@class,'jcard-title')]"
+    ).first.inner_text().strip()
+
+
+def test_study_worksheet_orders_by_readiness(dash, server):
+    """The worksheet picks the readiest topic, not the oldest: beta requires
+    alpha in the fixtures, so alpha is handed over first and beta's checklist
+    row says what it is waiting for. Ticking alpha promotes beta and the hint
+    goes away."""
+    goto_page(dash, server, "/study")
+    assert "Picked by readiness" in dash.locator(
+        "text=Picked by readiness >> visible=true").first.inner_text()
+    assert _learn_card_title(dash) == "Demo Alpha Topic"
+    beta = dash.locator("div[data-testid='stCheckbox']", has_text="Demo Beta Topic").first
+    assert "after: Demo Alpha Topic" in beta.inner_text()
+
+    dash.locator("div[data-testid='stCheckbox']", has_text="Demo Alpha Topic").first.click()
+    dash.wait_for_timeout(1800)
+    assert dash.locator("text=1/2 studied >> visible=true").count() >= 1
+    assert _learn_card_title(dash) == "Demo Beta Topic"
+    assert dash.locator("text=after: Demo Alpha Topic >> visible=true").count() == 0
+
+    # untick to leave state clean for other tests
+    dash.locator("div[data-testid='stCheckbox']", has_text="Demo Alpha Topic").first.click()
+    dash.wait_for_timeout(1500)
+    assert dash.locator("text=0/2 studied >> visible=true").count() >= 1
+
+
 def test_activity_calendar(dash, server):
     """Tracker shows the clickable month grid; the selected day (today by
     default) lists that day's status events."""

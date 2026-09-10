@@ -336,6 +336,34 @@ def _studied_at(completed_at: str | None, f: Path):
     return datetime.fromisoformat(completed_at)
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _concept_graph_for(signature):
+    """The concept layer for one state of the topic folder. The signature is
+    the cache key and nothing else: it is what tells Streamlit that a file
+    was rewritten, added or removed since the last build."""
+    return concepts.build(study_dir(), conn)
+
+
+def _concept_graph():
+    """`concepts.build` over the study folder, built at most once per change
+    to it (and once a minute regardless, so an override written by another
+    tab is picked up).
+
+    Every page that wants prerequisites calls this rather than `build`, which
+    walks and parses every topic file. What the cache must NOT hold is which
+    topics are ticked off: ticking a checkbox writes the DB and leaves the
+    folder alone, so the signature would not move. Studied state comes from
+    `concepts.study_order(result, conn)` with a live connection instead.
+    """
+    topics = study_dir() / "topics"
+    try:
+        signature = tuple(sorted((f.name, f.stat().st_mtime)
+                                 for f in topics.glob("*.md")))
+    except OSError:
+        signature = ()
+    return _concept_graph_for(signature)
+
+
 def _back_to_study():
     st.markdown('<a href="study" target="_self">← Back to Study</a>',
                 unsafe_allow_html=True)
@@ -1350,19 +1378,51 @@ def _session_card(col, tag: str, f, body_html: str):
                     unsafe_allow_html=True)
 
 
-def _todays_session(topic_files, studied):
-    """The daily worksheet: solve / learn / rehearse, picked deterministically
-    from the oldest unticked topic in each lane. Never empty while anything
-    is unstudied - independent of what the routine did today."""
+def _after_line(row, titles) -> str:
+    """The muted "after: …" line under a picked card, or nothing.
+
+    A topic can be the best thing to read today and still owe you something -
+    the starvation escape promotes a topic whose prerequisites are unstudied,
+    and a chain a -> b -> c with b studied leaves c ready but still owing a.
+    The line names that debt without demoting the card.
+    """
+    after = row.get("after") if row else None
+    if not after:
+        return ""
+    names = ", ".join(titles.get(slug, slug) for slug in after)
+    return (f'<div class="jcard-sub" style="margin:8px 0 0 0">'
+            f'after: {esc(names)}</div>')
+
+
+def _todays_session(topic_files, studied, order_rows):
+    """The daily worksheet: solve / learn / rehearse, one card a lane.
+
+    The two technical lanes take the first topic of their kind out of
+    `concepts.study_order`, so what you are handed is the readiest thing you
+    have not read: prerequisites first, and among topics that are equally
+    ready, the one that has waited longest. Resume drills carry no
+    prerequisites and are not in the order at all, so the drill lane keeps
+    the old rule - the oldest unticked drill.
+
+    Never empty while anything is unstudied, independent of what the routine
+    did today.
+    """
     unticked = [f for f in topic_files if not studied(f)]
     if not unticked:
         st.success("Everything in the study base is ticked off. New material "
                    "lands with the next routine run. 🎉")
         return
     unticked.sort(key=lambda f: f.stat().st_mtime)  # oldest debt first
-    dsa = next((f for f in unticked if f.stem.startswith("dsa-")), None)
     drill = next((f for f in unticked if f.stem.startswith("resume-")), None)
-    tech = next((f for f in unticked if f is not dsa and f is not drill), None)
+
+    by_slug = {f.stem: f for f in unticked}
+    rows = [r for r in order_rows if r["slug"] in by_slug]
+    titles = {r["slug"]: r["title"] for r in order_rows}
+    dsa_row = next((r for r in rows if r["slug"].startswith("dsa-")), None)
+    tech_row = next((r for r in rows if not r["slug"].startswith("dsa-")
+                     and not r["slug"].startswith("resume-")), None)
+    dsa = by_slug[dsa_row["slug"]] if dsa_row else None
+    tech = by_slug[tech_row["slug"]] if tech_row else None
 
     st.markdown("#### 🗓 Today's session")
     cols = st.columns(3, gap="medium")
@@ -1372,12 +1432,14 @@ def _todays_session(topic_files, studied):
                            _md_section(md, "Practice"))[:3]
         body = "<br>".join(f'<a href="{esc(u)}">{esc(t)}</a>' for t, u in links) \
             or esc(_first_sentences(_md_section(md, "Concept")))
-        _session_card(cols[0], "SOLVE · warm-up problems", dsa, body)
+        _session_card(cols[0], "SOLVE · warm-up problems", dsa,
+                      body + _after_line(dsa_row, titles))
     else:
         cols[0].caption("No DSA topic pending.")
     if tech is not None:
         body = esc(_first_sentences(_md_section(_body(tech), "Concept")))
-        _session_card(cols[1], "LEARN · one concept", tech, body)
+        _session_card(cols[1], "LEARN · one concept", tech,
+                      body + _after_line(tech_row, titles))
     else:
         cols[1].caption("No tech topic pending.")
     if drill is not None:
@@ -1387,8 +1449,8 @@ def _todays_session(topic_files, studied):
         _session_card(cols[2], "REHEARSE · resume drill", drill, body)
     else:
         cols[2].caption("No resume drill pending.")
-    st.caption("Picked from your oldest unstudied topics. Do these three, tick "
-               "them off below, and tomorrow's session moves forward.")
+    st.caption("Picked by readiness: prerequisites first, then what has "
+               "waited longest.")
     st.divider()
 
 
@@ -1410,7 +1472,12 @@ def page_study():
         def studied(f: Path) -> bool:
             return _studied_at(progress.get(f.stem), f) is not None
 
-        _todays_session(topic_files, studied)
+        # readiness, from the cached concept layer plus live ticks: what the
+        # worksheet picks with, and what the checklist hints with
+        order_rows = concepts.study_order(_concept_graph(), conn)["order"]
+        order_by_slug = {r["slug"]: r for r in order_rows}
+
+        _todays_session(topic_files, studied, order_rows)
 
         done_files = [f for f in topic_files if studied(f)]
         todo_files = [f for f in topic_files if not studied(f)]
@@ -1425,6 +1492,13 @@ def page_study():
                 label = f.stem.replace("-", " ").title()
                 if updated:
                     label += "  ·  updated since you studied it"
+                # the list stays alphabetical - it is a checklist, not a queue -
+                # so a topic that needs something else first says so instead
+                row = order_by_slug.get(f.stem)
+                if not done and row and row["after"]:
+                    first = row["after"][0]
+                    label += ("  ·  after: "
+                              + order_by_slug.get(first, {}).get("title", first))
                 r1, r2 = st.columns([6, 2], vertical_alignment="center")
                 val = r1.checkbox(label, value=done, key=f"sp_{f.stem}")
                 if val != done:
