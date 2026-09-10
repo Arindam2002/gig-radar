@@ -597,6 +597,45 @@ def test_topic_page_diagram(page, server):
     assert page.locator("[data-testid='stImage']").count() == 0
 
 
+def test_concepts_page(page, server):
+    """/concepts renders the generated sheet: the fixture's shared concept is
+    listed once under "Shared concepts" however many topics name it, `?c=`
+    loads without complaint, and a topic heading is a link to that topic."""
+    goto_page(page, server, "/concepts")
+    page.wait_for_selector("text=Shared concepts", timeout=30000)
+    body = page.locator("section.main, [data-testid='stMain']").first.inner_text()
+    assert "alpha concept" in body and "beta concept" in body
+    # four concepts across the two fixture topics, no definitional card for
+    # any of them (alpha's deck asks what the DECK proves, not what a
+    # concept is), so every bullet is a gap
+    assert body.count("(no card yet)") >= 4
+
+    # both fixture topics name it, and the shared section names it once
+    shared = body.split("Shared concepts", 1)[1].split("Study order", 1)[0]
+    assert shared.lower().count("shared concept") == 1
+
+    # the anchored form of the concept, and the raw name, both just load
+    for value in ("concept-shar", "shared-concept"):
+        goto_page(page, server, f"/concepts?c={value}")
+        page.wait_for_selector("text=Shared concepts", timeout=30000)
+        assert page.locator("text=Traceback >> visible=true").count() == 0
+        assert page.locator("[data-testid='stException']").count() == 0
+    # the last of those was the live anchor: the script found it and marked
+    # the row, which is the only observable proof that it ran at all
+    goto_page(page, server, "/concepts?c=concept-shar")
+    # an empty anchor has no box of its own, so wait for it in the DOM
+    page.wait_for_selector("#concept-shar", state="attached", timeout=30000)
+    page.wait_for_timeout(1200)
+    assert page.evaluate(
+        "document.getElementById('concept-shar').parentElement.style.background")
+
+    # the sheet's topic headings are topic-page links
+    goto_page(page, server, "/concepts")
+    page.get_by_role("link", name=re.compile("Demo Alpha Topic")).first.click()
+    page.wait_for_url(re.compile(r"topic=demo-alpha-topic"), timeout=30000)
+    page.wait_for_selector("#jsr-art h1", timeout=30000)
+
+
 def test_map_renders_and_navigates(page, server):
     """/map draws one node per topic and a line for the alpha->beta edge;
     clicking a node opens that topic's page."""

@@ -30,6 +30,11 @@ exported and degraded to plain text when it is not, a "Related" section of
 wikilinks so the Quartz graph has real edges, the flashcard deck as
 collapsible callouts, and the overview diagram if there is one.
 
+Alongside the pages goes `<out>/concepts.md`, the concept sheet for exactly
+the topics that were exported: the vocabulary of the published base, with a
+one-line definition wherever a definitional flashcard supplies one, and none
+of the question counts, studied flags or study order the local sheet carries.
+
 `<out>/.published.yaml` is the manifest. Anything it listed last time and
 does not list now is deleted, which is what makes unpublishing real. Nothing
 else under `<out>` is ever touched, so the hand-written `blog/` section and
@@ -50,13 +55,24 @@ from pathlib import Path
 
 import yaml
 
-from jobscout import cards, db, graph, settings
+from jobscout import cards, concepts, db, graph, settings
 
 MANIFEST = ".published.yaml"
 
+# The concept sheet's page on the site, and the key it takes in the manifest.
+# The key is namespaced with a leading underscore because a topic slug never
+# starts with one, so `_prune` can tell the sheet from a topic without
+# guessing, and the sheet is pruned by exactly the same rule as a page.
+CONCEPTS_PAGE_SLUG = "concepts"
+CONCEPTS_PAGE = f"{CONCEPTS_PAGE_SLUG}.md"
+CONCEPTS_KEY = "_concepts"
+
 # A slug is a file name and nothing else. Anything from a manifest on disk is
-# checked against this before it is turned into a path to delete.
-_SAFE_SLUG = re.compile(r"\A[A-Za-z0-9_-]+\Z")
+# checked against this before it is turned into a path to delete. "concepts"
+# is excluded outright: a topic by that name would write over the sheet, and
+# a page you cannot tell apart from a generated one is not a page worth
+# publishing.
+_SAFE_SLUG = re.compile(rf"\A(?!{CONCEPTS_PAGE_SLUG}\Z)[A-Za-z0-9_-]+\Z")
 
 _H1_LINE = re.compile(r"^#[ \t]+.+?[ \t]*$", re.M)
 
@@ -289,10 +305,20 @@ class Result:
     warned: list = field(default_factory=list)            # (slug, [name, …])
     deleted: list = field(default_factory=list)           # paths removed
     pages: dict = field(default_factory=dict)             # slug -> markdown
+    sheet: str = ""                                       # the concept sheet
 
     @property
     def ok(self) -> bool:
         return not self.refused
+
+
+def reserved(slug) -> bool:
+    """Whether a slug would collide with the generated concept sheet - the
+    page it writes, or the key it takes in the manifest - or is not a plain
+    file name at all. Refused rather than skipped: a name that would
+    overwrite a generated page is a mistake worth stopping the run for."""
+    slug = str(slug)
+    return slug == CONCEPTS_KEY or not _SAFE_SLUG.match(slug)
 
 
 def _candidates(study_dir: Path, rows: dict, result: Result) -> dict:
@@ -304,6 +330,10 @@ def _candidates(study_dir: Path, rows: dict, result: Result) -> dict:
     """
     keep = {}
     for slug in sorted(rows):
+        if reserved(slug):
+            result.refused.append((slug, [f"the slug {slug!r} is reserved for "
+                                          f"the concept sheet"]))
+            continue
         f = graph.topics_dir(study_dir) / f"{slug}.md"
         if not f.is_file():
             result.skipped.append((slug, "no topic file any more"))
@@ -332,16 +362,56 @@ def _read_manifest(out_dir: Path) -> dict:
 def _prune(out_dir: Path, previous: dict, keep: set) -> list:
     """Delete the page and diagram of every slug the last run published and
     this one does not. Only those two paths, only for a slug that is a plain
-    file name: a manifest is a file on disk and gets no more trust than one."""
+    file name: a manifest is a file on disk and gets no more trust than one.
+
+    The concept sheet is pruned by the same rule under its reserved key, so
+    unflagging your last topic takes the sheet down with the pages.
+    """
     removed = []
     for slug in sorted(previous):
-        if slug in keep or not _SAFE_SLUG.match(str(slug)):
+        if slug in keep:
+            continue
+        if str(slug) == CONCEPTS_KEY:
+            p = out_dir / CONCEPTS_PAGE
+            if p.is_file():
+                p.unlink()
+                removed.append(str(p))
+            continue
+        if not _SAFE_SLUG.match(str(slug)):
             continue
         for p in (out_dir / f"{slug}.md", out_dir / "diagrams" / f"{slug}.svg"):
             if p.is_file():
                 p.unlink()
                 removed.append(str(p))
     return removed
+
+
+def _build_sheet(study_dir: Path, conn, result: Result, pattern) -> None:
+    """Render the concept sheet for the topics that are actually going out,
+    and put it through the same door as a page.
+
+    It covers the exported set and nothing else, so a concept only one
+    unpublished topic teaches never reaches the site, and it carries no
+    question counts, no studied flags and no study order - the reading
+    history is the part of the layer that stays home.
+
+    A refusal here refuses the SHEET, not the pages: the sheet is derived, so
+    the fix is a concept name, and holding back eleven good pages over one
+    would be a tantrum. The run still exits non-zero.
+    """
+    if not result.exported:
+        return                                  # nothing to make a sheet of
+    layer = concepts.build(study_dir, conn)
+    text = concepts.sheet(layer, study_dir, conn, public=True,
+                          export_set=set(result.exported))
+    bad = refusals(text)
+    if bad:
+        result.refused.append((CONCEPTS_PAGE, bad))
+        return
+    hits = company_hits(text, pattern)
+    if hits:
+        result.warned.append((CONCEPTS_PAGE, hits))
+    result.sheet = text
 
 
 def export(study_dir: Path, out_dir: Path, conn=None,
@@ -373,12 +443,17 @@ def export(study_dir: Path, out_dir: Path, conn=None,
         result.pages[slug] = page
         result.exported.append(slug)
 
+    _build_sheet(study_dir, conn, result, pattern)
+
     if dry_run:
         return result
 
+    keep_paths = set(result.exported)
+    if result.sheet:
+        keep_paths.add(CONCEPTS_KEY)
+
     out_dir.mkdir(parents=True, exist_ok=True)
-    result.deleted = _prune(out_dir, _read_manifest(out_dir),
-                            set(result.exported))
+    result.deleted = _prune(out_dir, _read_manifest(out_dir), keep_paths)
 
     for slug, page in result.pages.items():
         (out_dir / f"{slug}.md").write_text(page, encoding="utf-8")
@@ -386,10 +461,18 @@ def export(study_dir: Path, out_dir: Path, conn=None,
         if svg.is_file():
             (out_dir / "diagrams").mkdir(exist_ok=True)
             shutil.copyfile(svg, out_dir / "diagrams" / f"{slug}.svg")
+    if result.sheet:
+        (out_dir / CONCEPTS_PAGE).write_text(result.sheet, encoding="utf-8")
 
+    # The reserved key is not a row in `study_publish` and never looked up
+    # there: the sheet is generated, so what it is stamped with is the moment
+    # it was written and the hash of what was written.
     manifest = {slug: {"reviewed_at": rows[slug].get("reviewed_at"),
                        "content_hash": rows[slug].get("content_hash")}
-                for slug in result.exported}
+                for slug in result.exported if slug != CONCEPTS_KEY}
+    if result.sheet:
+        manifest[CONCEPTS_KEY] = {"reviewed_at": db.now_iso(),
+                                  "content_hash": content_hash(result.sheet)}
     (out_dir / MANIFEST).write_text(
         yaml.safe_dump(manifest, sort_keys=True, allow_unicode=True),
         encoding="utf-8")
@@ -407,6 +490,10 @@ def audit(study_dir: Path, conn=None) -> Result:
     result = Result()
     keep = {}
     for f in graph.topic_files(study_dir):
+        if reserved(f.stem):
+            result.refused.append((f.stem, [f"the slug {f.stem!r} is reserved "
+                                            f"for the concept sheet"]))
+            continue
         text = f.read_text(encoding="utf-8")
         meta, _ = graph.split_frontmatter(text)
         if graph.track_of(f.stem, meta) == "resume":
@@ -440,6 +527,8 @@ def _report(result: Result, dry_run: bool):
           f"skipped {len(result.skipped)}, refused {len(result.refused)}")
     for slug in result.exported:
         print(f"  + {slug}")
+    if result.sheet:
+        print(f"  + {CONCEPTS_PAGE} - the concept sheet for those topics")
     for slug, why in result.skipped:
         print(f"  - {slug}: {why}")
     for slug, names in result.warned:

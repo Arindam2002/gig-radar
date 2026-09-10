@@ -1524,6 +1524,10 @@ def page_study():
     else:
         st.info("The study base is created by the daily `job-scout-daily-brief` routine - "
                 "run it once (Scheduled sidebar → Run now) to start it.")
+    st.caption('Every idea these topics teach, with a one-line definition where '
+               'a flashcard gives one, is on the '
+               '<a href="concepts" target="_self">Concepts</a> sheet.',
+               unsafe_allow_html=True)
 
 
 def page_map():
@@ -1568,6 +1572,69 @@ def page_map():
                "and the badge counts your notes.")
 
 
+def _scroll_to_concept(param: str):
+    """Scroll `?c=<anchor>` into view once the sheet is on the page.
+
+    The sheet gives every concept an `<a id>` on its first appearance, and a
+    chip or a map node links here with that id. Streamlit renders the page
+    top-down and React commits when it is ready, so the script retries for a
+    few seconds rather than assuming the markdown has landed (the first tick
+    reliably misses), and gives up quietly: a stale link should leave you at
+    the top of the sheet, not staring at an error.
+
+    The script contains no `<` on purpose. `st.html` hands the body to the
+    browser as markup, so a `for (i < n)` reads as the start of a tag and the
+    whole script is dropped without a word - hence forEach and `40 > n`.
+    """
+    raw = re.sub(r"[^a-zA-Z0-9 _-]", "", param).strip().replace(" ", "-")
+    if not raw:
+        return
+    # a link may carry the anchor, or the concept name it was made from
+    guess = concepts.anchor_for(concepts.normalise(raw.replace("-", " ")))
+    wanted = [w for w in dict.fromkeys([raw, guess]) if w]
+    st.html(
+        "<script>(function(){var ids=" + json.dumps(wanted) + ",n=0;"
+        "function tick(){var hit=null;"
+        "ids.forEach(function(id){if(!hit){hit=document.getElementById(id);}});"
+        "if(hit){hit.scrollIntoView({block:'center'});"
+        "var row=hit.parentElement;if(row){"
+        "row.style.background='rgba(255,214,0,.22)';"
+        "row.style.borderRadius='4px';}return;}"
+        "n=n+1;if(40>n){setTimeout(tick,100);}}tick();})();</script>",
+        unsafe_allow_javascript=True)
+
+
+def page_concepts():
+    """The generated concept sheet as its own page.
+
+    The same text `python -m jobscout.concepts sheet` writes to
+    study/CONCEPTS.md, so what you read here and what the routine reads
+    before it names a concept are one document. Topic headings are rewritten
+    into topic-page links on the way through, which is why the sheet writes
+    them as `topics/<slug>.md` in the first place.
+    """
+    if topic_article():
+        return
+    page_header("🧭 Concepts", "the vocabulary of the study base: every topic's "
+                "concepts, defined where a flashcard defines them")
+    sdir = study_dir()
+    result = concepts.build(sdir, conn)
+    if not result["topics"]:
+        st.info("Nothing to list yet - the study base is created by the daily "
+                "`job-scout-daily-brief` routine.")
+        return
+
+    md = concepts.sheet(result, sdir, conn)
+    md = re.sub(r"\A#[ \t]+Concepts[ \t]*\n", "", md)     # the header says it
+    st.markdown(linkify_topics(md), unsafe_allow_html=True)
+    _scroll_to_concept(st.query_params.get("c") or "")
+    st.caption("Concepts come from each topic's frontmatter and definitions "
+               "from its flashcard deck, so \"(no card yet)\" is a real gap: "
+               "the deck has no card that says what the thing is. Nothing on "
+               "this page is hand-written - regenerate it with "
+               "`python -m jobscout.concepts sheet`.")
+
+
 # ── navigation ──────────────────────────────────────────────────────
 pg = st.navigation([
     st.Page(page_today, title="Today", icon="📋", default=True),
@@ -1576,6 +1643,7 @@ pg = st.navigation([
     st.Page(page_tracker, title="Tracker", icon="📊", url_path="tracker"),
     st.Page(page_study, title="Study", icon="📚", url_path="study"),
     st.Page(page_map, title="Map", icon="🗺️", url_path="map"),
+    st.Page(page_concepts, title="Concepts", icon="🧭", url_path="concepts"),
 ])
 
 # global sidebar footer: the one action that isn't page-specific

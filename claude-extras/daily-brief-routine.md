@@ -93,6 +93,23 @@ Read STUDY.md first.
      No `title` key - the `# ` heading is the title. `related` holds slugs of
      topics that ALREADY have files: at least 2 for a technical topic, and
      the reason the graph is worth drawing. Resume drills need none.
+   - **Every NEW technical topic also names its concepts and its
+     prerequisites**, two more keys in the same block:
+     ```
+     concepts: [covering index, execution plan, change tracking]
+     prereqs: [sql-indexing-query-performance]
+     ```
+     `concepts` is 5 to 10 canonical names for the ideas the topic teaches -
+     short noun phrases, lowercase except acronyms, no trailing punctuation.
+     `prereqs` is 0 to 3 slugs of EXISTING technical topics you would want
+     under your belt before this one; leave it empty rather than inventing a
+     dependency. Resume drills get neither key.
+   - **Read study/CONCEPTS.md before you name a concept.** It is the
+     generated list of every name already in use. If the idea is already
+     there under another spelling, reuse the existing name exactly - one
+     idea, one name, or the sheet turns into a thesaurus. A REVISION may ADD
+     concepts for genuinely new material, and never renames or removes the
+     ones already in the file.
    - NEW topic → create <slug>.md: frontmatter / `# <Topic>` / `## Concept` (first
      principles, ~200 words) / `## Why interviewers ask this` / `## Q&A` (3-4
      questions, each with a COMPLETE teaching answer - reasoning and
@@ -148,7 +165,8 @@ Read STUDY.md first.
     Start with "# 📋 Daily brief - <Weekday, DD Mon YYYY>". Sections: Apply
     sprint (why-you lines, job URLs as links) / Follow-ups due / One cold-mail
     prospect / 📚 Today's study (SHORT: topics with one-line hooks and
-    study/topics/<slug>.md links) / optional "⚠️ Profile sync suggested" note
+    study/topics/<slug>.md links, then one line listing the new concept
+    names step 14 reports) / optional "⚠️ Profile sync suggested" note
     if the resume and profile.yaml skills have clearly diverged (do NOT edit
     profile.yaml yourself). Keep the brief bounded - it is a 30-minute morning
     ritual, not homework. Prose format and layout are yours to choose freely.
@@ -161,6 +179,19 @@ Read STUDY.md first.
     "title": "<job title as stored in the jobs table>", "company": "<company
     as stored in the jobs table>"}. Copy title/company from the DB rows, not
     from your own rephrasing. A brief without its manifest is incomplete.
+
+14. **Close the run on the concept layer**, in this order, from the project
+    directory:
+    - `.venv/bin/python -m jobscout.concepts check` - the lint plus the
+      names today's topics introduced that the sheet has not seen yet. Copy
+      that list of NEW CONCEPT NAMES into the brief's study section, one
+      line, so a name that drifted gets caught the day it appears instead of
+      a hundred at a time. Warnings are a report, not a gate: note them, do
+      not stop.
+    - `.venv/bin/python -m jobscout.concepts sheet` - regenerates
+      study/CONCEPTS.md from the frontmatter. Run it AFTER `check`, because
+      `check` diffs against the sheet on disk. Never hand-edit CONCEPTS.md;
+      it is generated, and the file says so.
 
 ## Hard constraints
 - NEVER send emails or submit applications; never change job statuses; never

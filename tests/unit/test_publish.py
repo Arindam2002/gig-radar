@@ -108,7 +108,9 @@ def d1(study, conn, out):
 
 def test_d1_exports_only_the_approved_technical_topics(d1, out):
     assert d1.exported == ["publish-alpha", "publish-beta"]
-    assert pages(out) == {"publish-alpha.md", "publish-beta.md"}
+    # the two pages, plus the generated concept sheet that always rides along
+    assert pages(out) == {"publish-alpha.md", "publish-beta.md",
+                          publish.CONCEPTS_PAGE}
     assert d1.ok and d1.refused == []
     reasons = dict(d1.skipped)
     assert "resume" in reasons["resume-publish-drill"]
@@ -169,7 +171,8 @@ def test_d1_copies_and_embeds_the_diagram(d1, out):
 
 def test_d1_writes_the_manifest(d1, out):
     manifest = yaml.safe_load((out / publish.MANIFEST).read_text())
-    assert set(manifest) == {"publish-alpha", "publish-beta"}
+    assert set(manifest) == {"publish-alpha", "publish-beta",
+                             publish.CONCEPTS_KEY}
     assert manifest["publish-alpha"]["content_hash"]
     assert manifest["publish-alpha"]["reviewed_at"]
 
@@ -320,7 +323,7 @@ def test_d4_unflagging_deletes_the_page_and_its_diagram(study, conn, out):
     assert (blog / "post.md").read_text() == "# A post I wrote myself\n"
     assert (out / "keep.md").read_text() == "not mine to delete\n"
     assert yaml.safe_load((out / publish.MANIFEST).read_text()).keys() == {
-        "publish-beta"}
+        "publish-beta", publish.CONCEPTS_KEY}
 
 
 def test_d4_a_manifest_slug_that_is_a_path_is_ignored(study, conn, out):
@@ -359,3 +362,136 @@ def test_check_reports_without_writing(study, conn, out):
     result = publish.export(study, out, conn, dry_run=True)
     assert result.exported == ["publish-alpha", "publish-beta"]
     assert not out.exists()
+
+
+# ── C2: the concept sheet goes out with the pages ───────────────────
+#
+# The publish fixture's topics carry no `concepts` key: it was written before
+# the concept layer existed, and the D-tests pin its exact bytes. So these
+# tests name concepts on the tmp_path COPY, right before approving it, which
+# is also the honest order - a version is approved after it is written.
+
+def name_concepts(study: Path, slug: str, *names):
+    """Add a `concepts:` line to a topic's frontmatter in the copy."""
+    f = topic(study, slug)
+    head, rest = f.read_text().split("\n---\n", 1)
+    f.write_text(f"{head}\nconcepts: [{', '.join(names)}]\n---\n{rest}")
+
+
+@pytest.fixture()
+def c2(study, conn, out):
+    """Alpha and beta approved, each naming a concept of its own and one they
+    share, so the sheet has both a per-topic list and a shared entry. Delta
+    names a concept too and is never approved, which is what the "exported
+    topics only" rule has to leave out."""
+    name_concepts(study, "publish-alpha", "covering index", "shared concept")
+    name_concepts(study, "publish-beta", "connection pool", "shared concept")
+    name_concepts(study, "publish-delta", "delta only concept")
+    for slug in ("publish-alpha", "publish-beta"):
+        approve(conn, study, slug)
+    return publish.export(study, out, conn)
+
+
+def sheet_text(out: Path) -> str:
+    return (out / publish.CONCEPTS_PAGE).read_text()
+
+
+def test_c2_the_sheet_covers_the_exported_topics_and_nothing_else(c2, out):
+    text = sheet_text(out)
+    assert c2.ok and c2.refused == []
+    assert "**covering index**" in text
+    assert "**connection pool**" in text
+    assert "delta only concept" not in text            # never approved
+    assert "drill" not in text.lower()                 # never exported at all
+    # every wikilink on the sheet resolves to a page this run actually wrote
+    targets = {m.group(1) for m in publish._WIKILINK.finditer(text)}
+    assert targets == {"publish-alpha", "publish-beta"}
+    for slug in targets:
+        assert (out / f"{slug}.md").is_file()
+
+
+def test_c2_the_sheet_carries_none_of_the_local_extras(c2, out):
+    """The archive copy is the vocabulary, not the reading history."""
+    text = sheet_text(out)
+    assert "Generated from the published topics." in text
+    assert "Study order" not in text
+    assert "studied" not in text                       # "not studied" too
+    assert "question" not in text and "round" not in text
+    assert "](topics/" not in text                     # wikilinks, not md links
+    assert "<a id=" not in text                        # anchors are local-only
+    assert "## Shared concepts" in text
+    assert "**shared concept**" in text
+
+
+def test_c2_the_sheet_is_in_the_manifest_under_the_reserved_key(c2, conn, out):
+    manifest = yaml.safe_load((out / publish.MANIFEST).read_text())
+    assert set(manifest) == {"publish-alpha", "publish-beta",
+                             publish.CONCEPTS_KEY}
+    entry = manifest[publish.CONCEPTS_KEY]
+    assert entry["reviewed_at"]                        # stamped when written
+    assert entry["content_hash"] == publish.content_hash(sheet_text(out))
+    # and it is not, and never was, a row in study_publish
+    assert publish.CONCEPTS_KEY not in db.publish_map(conn)
+
+
+def test_c2_unflagging_the_last_topic_takes_the_sheet_down(study, conn, out):
+    name_concepts(study, "publish-alpha", "covering index", "shared concept")
+    approve(conn, study, "publish-alpha")
+    publish.export(study, out, conn)
+    assert (out / publish.CONCEPTS_PAGE).is_file()
+
+    db.clear_publish(conn, "publish-alpha")
+    result = publish.export(study, out, conn)
+    assert result.exported == [] and result.sheet == ""
+    assert not (out / publish.CONCEPTS_PAGE).exists()
+    assert any(publish.CONCEPTS_PAGE in p for p in result.deleted)
+    assert yaml.safe_load((out / publish.MANIFEST).read_text()) in ({}, None)
+
+
+def test_c2_a_marker_in_a_concept_name_refuses_the_sheet_only(
+        study, conn, out):
+    """A drill marker can only reach the site through a concept name here, so
+    that is where it is planted. The pages are innocent and still go out; the
+    sheet does not, and the run ends not-ok."""
+    name_concepts(study, "publish-alpha", "covering index", "The claim")
+    name_concepts(study, "publish-beta", "connection pool", "shared concept")
+    for slug in ("publish-alpha", "publish-beta"):
+        approve(conn, study, slug)
+
+    result = publish.export(study, out, conn)
+    assert result.exported == ["publish-alpha", "publish-beta"]
+    assert (out / "publish-alpha.md").is_file()
+    assert not (out / publish.CONCEPTS_PAGE).exists()
+    assert result.sheet == ""
+    assert not result.ok                               # main() exits non-zero
+    why = dict(result.refused)[publish.CONCEPTS_PAGE]
+    assert any("The claim" in line for line in why)
+    manifest = yaml.safe_load((out / publish.MANIFEST).read_text())
+    assert publish.CONCEPTS_KEY not in manifest
+
+
+def test_c2_a_topic_slug_called_concepts_is_refused(study, conn, out):
+    """It would write over the generated sheet, so it never gets the chance."""
+    src = topic(study, "publish-beta").read_text()
+    (study / "topics" / "concepts.md").write_text(src)
+    db.set_publish(conn, "concepts", publish.content_hash(src))
+    approve(conn, study, "publish-alpha")
+
+    result = publish.export(study, out, conn)
+    assert "concepts" not in result.exported
+    assert not result.ok
+    assert "reserved" in " ".join(dict(result.refused)["concepts"])
+    assert not publish._SAFE_SLUG.match("concepts")
+    # the audit path refuses it too, with no flag set at all
+    assert "concepts" in dict(publish.audit(study, conn).refused)
+
+
+def test_c2_check_mentions_the_sheet_without_writing_it(
+        study, conn, out, capsys):
+    name_concepts(study, "publish-alpha", "covering index", "shared concept")
+    approve(conn, study, "publish-alpha")
+    result = publish.export(study, out, conn, dry_run=True)
+    assert result.sheet                                # rendered, not written
+    assert not out.exists()
+    publish._report(result, True)
+    assert f"+ {publish.CONCEPTS_PAGE}" in capsys.readouterr().out

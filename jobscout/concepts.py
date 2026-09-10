@@ -40,7 +40,7 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from jobscout import db, graph, settings
+from jobscout import cards, db, graph, settings
 
 # A deck-sized list: enough to cover the topic, few enough to be curated.
 MIN_CONCEPTS = 5
@@ -540,12 +540,197 @@ def study_order(result: dict, conn=None, now=None) -> dict:
     return {"order": rows, "studied": done}
 
 
-# ── WS-C lands here ─────────────────────────────────────────────────
-# `definition_for(name, deck)` - the answer of the first definitional card
-# mentioning the name - and `sheet(result, …)` writing study/CONCEPTS.md,
-# plus the `sheet` command in the CLI below, belong in this section. Nothing
-# above needs them: `new_names` reads whatever sheet it is handed, and
-# `sheet_path` already knows where that is.
+# ── the sheet ───────────────────────────────────────────────────────
+
+# What a definitional card looks like from the outside. The prefix is
+# MATCHED, not searched for: the real SQL deck asks "What three things do
+# you read first in an execution plan?", which mentions the concept, teaches
+# you plenty, and tells a reader nothing about what an execution plan is.
+_DEFINITIONAL = re.compile(r"\A\s*(?:What\s+(?:is|are|does)|Define)\b", re.I)
+
+# What a concept with no definitional card gets. A visible gap is the point:
+# the sheet is also the list of definitions the decks still owe you.
+NO_DEFINITION = "(no card yet)"
+
+
+def _mentions(name: str):
+    """A pattern matching `name` as whole words, tolerant of whichever
+    separator the writer reached for: "KV-cache paging", "KV cache paging"
+    and "kv_cache paging" are one name asked three ways."""
+    tokens = _WORD.findall((name or "").lower())
+    if not tokens:
+        return None
+    body = r"[\s\-_/]+".join(re.escape(t) for t in tokens)
+    return re.compile(rf"(?<!\w){body}(?!\w)", re.I)
+
+
+def definition_for(name: str, deck: list) -> str | None:
+    """The one-line definition of `name` from a deck, or None.
+
+    The answer of the FIRST card whose question both opens like a definition
+    ("What is …", "What are …", "What does …", "Define …") and names the
+    concept. Every other card in a good deck is a good card and a bad
+    definition, so nothing else qualifies, and a concept with no such card
+    is left as a gap rather than filled with the nearest thing to hand.
+    """
+    pattern = _mentions(name)
+    if pattern is None:
+        return None
+    for card in deck or []:
+        question = str((card or {}).get("q") or "")
+        if not _DEFINITIONAL.match(question):
+            continue
+        if pattern.search(question):
+            answer = str(card.get("a") or "").strip()
+            return answer or None
+    return None
+
+
+def anchor_for(key) -> str:
+    """The HTML id a concept carries on the sheet, and the value `?c=` takes:
+    the concept id with its `c:` namespace stripped and its spaces dashed, so
+    it survives both a URL and an `id` attribute without escaping."""
+    if isinstance(key, tuple):
+        key = concept_id(key)
+    return str(key).removeprefix("c:").replace(" ", "-")
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}" + ("" if n == 1 else "s")
+
+
+def _definitions(result: dict, study_dir: Path, listed: list) -> dict:
+    """normalised key -> its definition, or None.
+
+    One deck read per listed topic, and the first topic that can define a
+    concept wins. A topic's own spelling is tried before any other, because
+    the card was written next to the spelling in that file.
+    """
+    decks = {slug: cards.load(study_dir, slug) for slug in listed}
+    listed_set = set(listed)
+    out: dict = {}
+    for key, entry in result["concepts"].items():
+        found = None
+        for slug in entry["topics"]:
+            if slug not in listed_set:
+                continue
+            deck = decks.get(slug) or []
+            for name in entry["names"]:
+                found = definition_for(name, deck)
+                if found:
+                    break
+            if found:
+                break
+        out[key] = found
+    return out
+
+
+def sheet(result: dict, study_dir: Path, conn=None, *,
+          public: bool = False, export_set=None) -> str:
+    """The whole concept layer as one markdown page.
+
+    Local (the default) is what `study/CONCEPTS.md` holds and what the
+    dashboard's Concepts page renders: every track, every technical topic
+    with how many questions it carries and whether you have studied it,
+    every concept with its definition or the gap where one should be, the
+    concepts more than one topic teaches, and what to study next.
+
+    Public (`public=True`, `export_set` naming the slugs actually being
+    published) is the archive copy. Same vocabulary, none of your reading
+    history: topics become wikilinks, and the counts, the studied flags and
+    the study order all go. A reader of the site gets the map; how far
+    through it you are is nobody's business.
+
+    Anchors are local-only and land on a concept's FIRST appearance, so
+    `?c=<anchor>` has exactly one place to scroll to.
+    """
+    study_dir = Path(study_dir)
+    topics = result["topics"]
+    wanted = None if export_set is None else set(export_set)
+
+    listed = [slug for slug in sorted(topics)
+              if topics[slug]["track"] != "resume"
+              and (wanted is None or slug in wanted)]
+    listed_set = set(listed)
+
+    definitions = _definitions(result, study_dir, listed)
+    studied = {} if public else _studied_map(result, conn)
+
+    here = {key: [s for s in entry["topics"] if s in listed_set]
+            for key, entry in result["concepts"].items()}
+    shared = [key for key in sorted(here) if len(here[key]) >= 2]
+    n_concepts = sum(1 for key in here if here[key])
+
+    anchored: set = set()
+
+    def anchor(key) -> str:
+        if public or key in anchored:
+            return ""
+        anchored.add(key)
+        return f'<a id="{anchor_for(key)}"></a>'
+
+    note = ("Generated from the published topics." if public else
+            "Generated by `python -m jobscout.concepts sheet`; do not edit.")
+    lines = ["# Concepts", "",
+             f"_{_plural(len(listed), 'topic')}, "
+             f"{_plural(n_concepts, 'concept')}, "
+             f"{len(shared)} shared across topics. {note}_"]
+
+    by_track: dict = {}
+    for slug in listed:
+        by_track.setdefault(topics[slug]["track"] or "unknown", []).append(slug)
+
+    for track in sorted(by_track):
+        lines += ["", f"## {track}"]
+        for slug in sorted(by_track[track],
+                           key=lambda s: (str(topics[s].get("title") or s).lower(), s)):
+            topic = topics[slug]
+            title = topic.get("title") or slug
+            if public:
+                head = f"### [[{slug}|{title}]]"
+            else:
+                head = (f"### [{title}](topics/{slug}.md) · "
+                        f"{_plural(int(topic.get('questions') or 0), 'question')} · "
+                        f"{_plural(int(topic.get('rounds') or 0), 'round')} · "
+                        + ("studied" if studied.get(slug) else "not studied"))
+            lines += ["", head, ""]
+            names = [n for n in topic["concepts"] if normalise(n)]
+            if not names:
+                lines.append("- (no concepts named yet)")
+                continue
+            for name in names:
+                key = normalise(name)
+                text = definitions.get(key) or NO_DEFINITION
+                lines.append(f"- {anchor(key)}**{name}** — {text}")
+
+    if shared:
+        lines += ["", "## Shared concepts", ""]
+        for key in shared:
+            entry = result["concepts"][key]
+            if public:
+                where = ", ".join(f"[[{s}|{topics[s].get('title') or s}]]"
+                                  for s in here[key])
+            else:
+                where = ", ".join(here[key])
+            lines.append(f"- {anchor(key)}**{entry['canonical']}** — {where}")
+
+    if not public:
+        rows = [r for r in study_order(result, conn)["order"]
+                if r["slug"] in listed_set]
+        if rows:
+            lines += ["", "## Study order", ""]
+            for i, row in enumerate(rows, 1):
+                lines.append(f"{i}. {row['slug']} ({row['reason']})")
+
+    return "\n".join(lines) + "\n"
+
+
+def write_sheet(result: dict, study_dir: Path, conn=None) -> Path:
+    """Write the local sheet next to the topics, and hand back the path."""
+    path = sheet_path(study_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(sheet(result, study_dir, conn), encoding="utf-8")
+    return path
 
 
 # ── CLI ─────────────────────────────────────────────────────────────
@@ -561,14 +746,21 @@ def _open_db():
 
 def _cli(argv: list[str]) -> int:
     cmd = argv[1] if len(argv) > 1 else "check"
-    if cmd not in ("check", "order"):
-        print(f"Unknown command '{cmd}'. Use: check | order")
+    if cmd not in ("check", "order", "sheet"):
+        print(f"Unknown command '{cmd}'. Use: check | order | sheet")
         return 0
 
     study = settings.study_dir()
     conn = _open_db()
     try:
         result = build(study, conn)
+
+        if cmd == "sheet":
+            # `check` diffs today's names against the sheet on disk, so a
+            # routine that wants that list runs `check` first and `sheet`
+            # after. Writing the sheet is what closes the day's diff.
+            print(write_sheet(result, study, conn))
+            return 0
 
         if cmd == "check":
             warnings = lint(result)
