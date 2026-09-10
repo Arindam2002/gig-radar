@@ -1618,7 +1618,9 @@ def _scroll_to_concept(param: str):
     browser as markup, so a `for (i < n)` reads as the start of a tag and the
     whole script is dropped without a word - hence forEach and `40 > n`.
     """
-    raw = re.sub(r"[^a-zA-Z0-9 _-]", "", param).strip().replace(" ", "-")
+    # links carry the concept id ("c:alpha concept"); drop the namespace
+    # first, or the colon strip below welds it onto the name
+    raw = re.sub(r"[^a-zA-Z0-9 _-]", "", concepts.anchor_for(param)).strip().replace(" ", "-")
     if not raw:
         return
     # a link may carry the anchor, or the concept name it was made from
@@ -1681,7 +1683,7 @@ pg = st.navigation([
 # global sidebar footer: the one action that isn't page-specific
 with st.sidebar:
     st.divider()
-    if st.button("⟳ Refresh data", use_container_width=True, disabled=refresh_running()):
+    if st.button("⟳ Refresh data", width="stretch", disabled=refresh_running()):
         if start_refresh():
             st.toast("Refresh started in the background", icon="⟳")
             st.rerun()
