@@ -1547,21 +1547,39 @@ def page_map():
         return
 
     tracks = sorted({n["track"] for n in g["nodes"]})
-    c1, c2 = st.columns([3.2, 1.1], vertical_alignment="center")
+    c1, c2, c3 = st.columns([2.4, 1.3, 1.1], vertical_alignment="center")
     with c1:
         chosen = st.pills("Tracks", tracks, selection_mode="multi",
                           default=tracks, key="map_tracks",
                           label_visibility="collapsed")
     with c2:
+        # Topics is the default and stays the default: concept mode adds a
+        # satellite per idea, which is five times the nodes, and that is a
+        # thing you ask for rather than a thing that happens to you.
+        mode = st.segmented_control("Mode", ["Topics", "Concepts"],
+                                    default="Topics", key="map_mode",
+                                    label_visibility="collapsed")
+    with c3:
         unstudied = st.toggle("Unstudied only", key="map_unstudied")
 
+    if mode == "Concepts":
+        g = mapview.with_concepts(g, _concept_graph())
     view = mapview.filter_graph(g, tracks=list(chosen or []),
                                 unstudied_only=unstudied)
-    n_done = sum(1 for n in view["nodes"] if n["studied"])
-    st.caption(f"{len(view['nodes'])} topic{'s' if len(view['nodes']) != 1 else ''} · "
-               f"{len(view['edges'])} link{'s' if len(view['edges']) != 1 else ''} · "
-               f"{n_done} studied")
-    if not view["nodes"]:
+    topics = [n for n in view["nodes"] if not mapview.is_concept(n)]
+    sats = [n for n in view["nodes"] if mapview.is_concept(n)]
+    arrows = sum(1 for e in view["edges"] if e.get("kind") == "prereq")
+    links = sum(1 for e in view["edges"]
+                if e.get("kind") not in ("prereq", "concept"))
+    n_done = sum(1 for n in topics if n["studied"])
+    bits = [f"{len(topics)} topic{'s' if len(topics) != 1 else ''}",
+            f"{links} link{'s' if links != 1 else ''}"]
+    if sats:
+        bits.append(f"{len(sats)} concept{'s' if len(sats) != 1 else ''}")
+        bits.append(f"{arrows} prerequisite{'s' if arrows != 1 else ''}")
+    bits.append(f"{n_done} studied")
+    st.caption(" · ".join(bits))
+    if not topics:
         st.info("No topics match these filters. Pick a track back up, or turn "
                 "off \"Unstudied only\".")
         return
@@ -1569,12 +1587,21 @@ def page_map():
     key = "study_map"
     pins = getattr(st.session_state.get(key), "pins", None) or {}
     mapview.study_map(view, pins=pins, key=key)
-    st.caption("The map drifts on its own. Hover a node to light up what it "
+    tail = ("Concept mode hangs every idea off the topic that teaches it, and "
+            "an idea two topics share sits between them - hover one to light "
+            "up everybody who names it, or click it to open its line on the "
+            "Concepts sheet. The arrows are prerequisites and point from what "
+            "you read first to what it unlocks; the topics themselves do not "
+            "move between the two modes. "
+            if mode == "Concepts" else "")
+    st.caption(tail +
+               "The map drifts on its own. Hover a node to light up what it "
                "connects to, click to open the topic, drag one around and its "
                "neighbours follow; letting go pins it (pins survive reruns) "
                "and a double-click sets it loose again. A solid ring means "
                "studied, a dashed outline means it is still waiting on you, "
-               "and the badge counts your notes.")
+               "the circle grows with how many questions the topic asks, and "
+               "the badge counts your notes.")
 
 
 def _scroll_to_concept(param: str):

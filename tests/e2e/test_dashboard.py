@@ -1,5 +1,7 @@
 """Playwright E2E against the seeded dashboard (see conftest.seed for data)."""
+import os
 import re
+import socket
 import subprocess
 import sys
 import threading
@@ -843,3 +845,285 @@ def test_map_double_click_unpins(page, server):
     # hand the next test a fresh one rather than whatever this one left
     page.reload()
     page.wait_for_selector("circle.jsm-node", timeout=30000)
+
+
+# ── WS-B3: concept mode on the map ──────────────────────────────────
+# The map grew a second reading: every concept as a satellite of the topic
+# that teaches it, an idea two topics share sitting between them, and the
+# prerequisite DAG drawn with heads on it. The promise that makes it a mode
+# rather than a different page is that the topics do not move.
+
+def _map_mode(page, name):
+    """Click one segment of the Topics/Concepts control and let it remount.
+
+    Not `get_by_text`: "Concepts" is also a page in the sidebar nav, and the
+    map has to be switched by the control on the map.
+    """
+    page.locator("div[data-testid='stButtonGroup'] button",
+                 has_text=name).first.click()
+    page.wait_for_timeout(3000)
+    page.wait_for_selector("circle.jsm-node", timeout=30000)
+
+
+def _labels(page):
+    """[(text, x, y, w, h), ...] for every label, in rendered pixels, with
+    the halo taken back off.
+
+    The halo is a 3-unit stroke painted under the glyphs so a name stays
+    readable where it crosses an edge, and `getBoundingClientRect` counts it.
+    Two labels whose haloes touch are not two labels you cannot read, so what
+    is measured here is the ink.
+    """
+    return page.eval_on_selector_all(".jsm-label", """els => els.map(e => {
+      const b = e.getBoundingClientRect()
+      const m = e.getScreenCTM()
+      const sw = parseFloat(getComputedStyle(e).strokeWidth || 0) * (m ? m.a : 1)
+      return [e.textContent, b.x + sw / 2, b.y + sw / 2,
+              Math.max(0, b.width - sw), Math.max(0, b.height - sw)]
+    })""")
+
+
+def _worst_label_overlap(boxes):
+    """The deepest any two label boxes bite into each other, and who."""
+    worst, who = 0.0, None
+    for i in range(len(boxes)):
+        _, x1, y1, w1, h1 = boxes[i]
+        for j in range(i + 1, len(boxes)):
+            _, x2, y2, w2, h2 = boxes[j]
+            ox = min(x1 + w1, x2 + w2) - max(x1, x2)
+            oy = min(y1 + h1, y2 + h2) - max(y1, y2)
+            if ox > 0 and oy > 0 and min(ox, oy) > worst:
+                worst, who = min(ox, oy), (boxes[i][0], boxes[j][0])
+    return worst, who
+
+
+def test_map_concept_mode_keeps_hub_positions(page, server):
+    """B3a. Switching to concepts adds satellites; it does not redraw the
+    map. The hubs are settled from the topic-only node set and the topic-only
+    seed, before a satellite exists, so `data-x0`/`data-y0` for every topic
+    has to come out the same in both modes - otherwise the mode reads as a
+    different picture and the reader loses the place they had learned."""
+    goto_page(page, server, "/map")
+    page.wait_for_selector("circle.jsm-node", timeout=30000)
+    before = {s: (x, y) for s, x, y, _ in _map_nodes(page)}
+    assert len(before) == 2
+
+    _map_mode(page, "Concepts")
+    after = {s: (x, y) for s, x, y, _ in _map_nodes(page)
+             if not s.startswith("c:")}
+    assert set(after) == set(before), "the topics themselves changed"
+    for slug, (x1, y1) in before.items():
+        x2, y2 = after[slug]
+        assert abs(x1 - x2) <= 1 and abs(y1 - y2) <= 1, \
+            f"{slug} moved {x1 - x2:.2f},{y1 - y2:.2f} between modes"
+
+    # ...and back again, so the mode is a view and not a one-way door
+    _map_mode(page, "Topics")
+    back = {s: (x, y) for s, x, y, _ in _map_nodes(page)}
+    for slug, (x1, y1) in before.items():
+        x2, y2 = back[slug]
+        assert abs(x1 - x2) <= 1 and abs(y1 - y2) <= 1, f"{slug} moved back"
+
+
+def test_map_concept_mode_nodes_and_arrows(page, server):
+    """B3b. One satellite per canonical concept - the fixture's two topics
+    name four concepts between them and one of those is the same idea twice,
+    so three - and a prerequisite arrow from alpha to beta even though that
+    pair is *also* related, which is the case the old one-line-per-pair
+    payload silently dropped."""
+    goto_page(page, server, "/map")
+    page.wait_for_selector("circle.jsm-node", timeout=30000)
+    _map_mode(page, "Concepts")
+
+    sats = page.locator("circle.jsm-node[data-kind='concept']")
+    assert sats.count() == 3, "one node per canonical concept"
+    ids = sorted(page.eval_on_selector_all(
+        "circle.jsm-node[data-kind='concept']",
+        "els => els.map(e => e.dataset.slug)"))
+    assert all(i.startswith("c:") for i in ids), ids
+    assert page.locator("circle.jsm-node[data-kind='topic']").count() == 2
+
+    pair = "[data-source='demo-alpha-topic'][data-target='demo-beta-topic']"
+    arrow = page.locator(f"line.jsm-prereq{pair}")
+    assert arrow.count() == 1, "the prerequisite arrow is missing"
+    assert "url(#jsm-arrow" in (arrow.first.get_attribute("marker-end") or "")
+    # the same pair still carries its related line: two facts, two lines
+    assert page.locator("line.jsm-related").count() >= 1
+    assert page.locator(f"line.jsm-edge{pair}").count() >= 2
+
+    # the shared concept hangs off both topics
+    shared = page.eval_on_selector_all(
+        "line.jsm-concept",
+        "els => els.map(e => [e.dataset.source, e.dataset.target])")
+    targets = {}
+    for src, tgt in shared:
+        targets.setdefault(tgt, set()).add(src)
+    assert any(len(v) == 2 for v in targets.values()), targets
+
+    # clicking a concept opens its line on the sheet, not a topic page
+    box = sats.first.bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.wait_for_timeout(400)
+    box = sats.first.bounding_box()
+    page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.wait_for_url(re.compile(r"/concepts\?c="), timeout=30000)
+    assert "topic=" not in page.url
+
+
+# The legibility gate. Everything above this line is checked against the two
+# fixture topics, which prove correctness and prove nothing about whether a
+# real study base drawn this way is readable. The dense fixture is built here
+# rather than in conftest on purpose: every other test in this file counts
+# the two demo topics, and a shared fixture that grew to seventy-five nodes
+# would rewrite most of them.
+
+_DENSE_BASES = ["query planner", "cache eviction", "batch window",
+                "index scan", "retry budget"]
+_DENSE_SHARED = ["shared alpha idea", "shared beta idea", "shared gamma idea"]
+_DENSE_TRACKS = ["dsa", "backend", "system-design", "llm-infra"]
+# 8 prerequisites, several of them on pairs that are also `related`, which is
+# the shape the real base has
+_DENSE_PREREQS = {2: [1], 3: [2], 4: [2], 6: [5], 7: [5],
+                  9: [8], 10: [9], 12: [11]}
+
+
+def _dense_study(root: Path):
+    """12 topics, 6 concepts each, 3 of those shared four ways, 8 prereqs.
+
+    63 canonical concepts and 75 nodes - about five times the study base's
+    present size, which is the point: concept mode has to survive the map it
+    will be looked at on in a year, not the one it was built against.
+    """
+    study = root / "study"
+    (study / "topics").mkdir(parents=True)
+    (study / "STUDY.md").write_text("# Study Base\n\ndense fixture\n")
+    for t in range(1, 13):
+        slug = f"dense-topic-{t:02d}"
+        names = [f"{b} {t:02d}" for b in _DENSE_BASES]
+        names.append(_DENSE_SHARED[(t - 1) // 4])
+        related = [f"dense-topic-{t + 1:02d}"] if t < 12 else []
+        prereqs = [f"dense-topic-{p:02d}" for p in _DENSE_PREREQS.get(t, [])]
+        questions = 2 + (t % 9)              # the real 2..10 depth range
+        body = "\n".join(
+            f"**Q{i}. What does dense topic {t:02d} ask you at step {i}?**\n\n"
+            f"Answer {i} for topic {t:02d}.\n" for i in range(1, questions + 1))
+        (study / "topics" / f"{slug}.md").write_text(
+            f"---\ntrack: {_DENSE_TRACKS[(t - 1) % 4]}\ntags: [dense]\n"
+            f"related: {related}\n"
+            f"concepts: {names}\nprereqs: {prereqs}\n"
+            f"created: 2026-01-01\nupdated: 2026-01-02\n---\n"
+            f"# Dense topic {t:02d}\n\n## Q&A\n\n{body}\n")
+    return study
+
+
+def _dense_server(root: Path, port: int):
+    """A second dashboard, on its own port, against the dense study folder.
+
+    Started the way conftest starts the first one - same interpreter, same
+    headless flags, same wait-for-the-socket loop - because the thing under
+    test is the real page, not a harness that resembles it.
+    """
+    from jobscout import db
+    db_path = root / "dense.db"
+    db.init_db(db_path).close()
+    briefs = root / "briefs"
+    briefs.mkdir()
+    (briefs / "TODAY.md").write_text("# Daily brief - dense\n")
+    env = dict(os.environ, JOBSCOUT_DB=str(db_path),
+               JOBSCOUT_DISABLE_REFRESH="1", JOBSCOUT_NO_LLM="1",
+               JOBSCOUT_BRIEFS=str(briefs),
+               JOBSCOUT_STUDY=str(_dense_study(root)))
+    proc = subprocess.Popen(
+        [str(ROOT / ".venv/bin/python"), "-m", "streamlit", "run",
+         str(ROOT / "dashboard.py"), "--server.port", str(port),
+         "--server.headless", "true", "--browser.gatherUsageStats", "false"],
+        env=env, cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(60):
+        try:
+            with socket.create_connection(("localhost", port), timeout=1):
+                break
+        except OSError:
+            time.sleep(0.5)
+    else:
+        proc.kill()
+        raise RuntimeError("the dense dashboard did not start")
+    return proc, f"http://localhost:{port}"
+
+
+def test_map_concept_mode_is_legible(page, tmp_path):
+    """B3c, and the whole reason this mode was allowed to be cancelled.
+
+    Correctness was never the risk here - seventy-five circles and a hundred
+    and forty lines is easy to draw and easy to draw unreadably. Three things
+    are measured on the dense fixture, and if any of them had failed the mode
+    would have shipped disabled:
+
+      * every name is still big enough to read. The viewBox is fitted to the
+        drawing, so a bigger graph is a more zoomed-out one, and an 11px
+        label on a map this size would arrive on screen at four. The font is
+        specified in layout units scaled by however far the drawing shrank.
+      * no two names sit on top of each other. Dodging circles is not enough
+        once labels outnumber them five to one.
+      * the frame loop still keeps time.
+    """
+    proc, url = _dense_server(tmp_path, 8596)
+    try:
+        page.goto(url + "/map")
+        page.wait_for_timeout(2500)
+        page.wait_for_selector("circle.jsm-node", timeout=30000)
+        _map_mode(page, "Concepts")
+        page.wait_for_timeout(2500)
+
+        sats = page.locator("circle.jsm-node[data-kind='concept']").count()
+        hubs = page.locator("circle.jsm-node[data-kind='topic']").count()
+        assert hubs == 12, hubs
+        assert sats == 63, f"12 topics x 6 concepts with 3 shared 4 ways: {sats}"
+        assert page.locator("line.jsm-prereq").count() == 8
+
+        boxes = _labels(page)
+        assert len(boxes) == hubs + sats
+        heights = sorted(b[4] for b in boxes)
+        smallest = [b for b in boxes if b[4] < 9]
+        assert not smallest, \
+            f"unreadable labels (min {heights[0]:.2f}px): {smallest[:3]}"
+
+        worst, who = _worst_label_overlap(boxes)
+        assert worst <= 2.0, f"labels overlap by {worst:.2f}px: {who}"
+
+        # the frame loop, sampled from the page's own requestAnimationFrame
+        # over three seconds. 20ms is 50fps; a 60Hz browser sits at 16.7.
+        gap = page.evaluate("""() => new Promise(res => {
+          const ts = []
+          const t0 = performance.now()
+          function tick(now) {
+            ts.push(now)
+            if (now - t0 < 3000) requestAnimationFrame(tick)
+            else res((ts[ts.length - 1] - ts[0]) / (ts.length - 1))
+          }
+          requestAnimationFrame(tick)
+        })""")
+        assert gap < 20, f"the map runs at {gap:.1f}ms a frame"
+
+        # the canvas grows with the crowd - 560px at fourteen nodes, up to
+        # 900 - and then shrinks back to whatever the drawing actually needs,
+        # so a wide graph is not two bands of empty with a map between them
+        shape = page.eval_on_selector("svg.jsm-svg", """e => {
+          const b = e.getBoundingClientRect()
+          const v = e.viewBox.baseVal
+          return [b.width, b.height, e.getAttribute("viewBox"),
+                  Math.min(b.width / v.width, b.height / v.height) * v.height]
+        }""")
+        assert 560 < shape[1] <= 900, f"the canvas did not grow: {shape}"
+        assert shape[1] - shape[3] < 24, f"the drawing is letterboxed: {shape}"
+
+        print(f"\nB3c on 12 topics + {sats} concepts: label height "
+              f"{heights[0]:.2f}..{heights[-1]:.2f}px, worst label overlap "
+              f"{worst:.2f}px, frame interval {gap:.2f}ms, canvas "
+              f"{shape[0]:.0f}x{shape[1]:.0f} viewBox {shape[2]}")
+        # the canvas itself, not the page: Streamlit scrolls its main column
+        # inside a container, so a full-page shot stops at the fold
+        page.locator("div.jsm-wrap").first.screenshot(
+            path=str(ROOT / "tests/e2e/.map-concepts.png"))
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)
