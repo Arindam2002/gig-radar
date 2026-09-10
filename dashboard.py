@@ -9,11 +9,13 @@ import json
 import os
 import random
 import re
+import sqlite3
 import subprocess
 import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import quote as urlquote
 
 import pandas as pd
 import streamlit as st
@@ -23,6 +25,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 from jobscout import cards  # noqa: E402
+from jobscout import concepts  # noqa: E402
 from jobscout import db  # noqa: E402
 from jobscout import graph  # noqa: E402
 from jobscout import mapview  # noqa: E402
@@ -338,6 +341,138 @@ def _back_to_study():
                 unsafe_allow_html=True)
 
 
+def _concept_chips(slug: str, result: dict):
+    """What this topic teaches, as chips under the Related strip.
+
+    The names come from the topic's own `concepts` frontmatter and stay in
+    the order they were written - that order is the author's, and sorting it
+    would lose the "start here, end there" reading of a curated list. The
+    spelling, though, is the canonical one from the concept graph, so a
+    topic that wrote "KV-cache paging" where an earlier topic wrote "paged
+    KV cache" still shows one name for one idea.
+
+    Each chip links at the concept sheet page (`/concepts?c=<id>`, WS-C).
+    That page may not exist yet; a chip that goes nowhere for a few days is
+    a better shape to build than a chip that has to be rewired later.
+
+    A topic with no concepts - every resume drill, and any technical topic
+    the routine has not caught up with - renders nothing at all.
+    """
+    names = (result["topics"].get(slug) or {}).get("concepts") or []
+    chips = []
+    for name in names:
+        key = concepts.normalise(name)
+        if not key:
+            continue                           # a name that is all stop words
+        entry = result["concepts"].get(key)
+        label = entry["canonical"] if entry else name
+        cid = entry["id"] if entry else concepts.concept_id(key)
+        chips.append(f'<a class="chip" href="concepts?c={urlquote(cid)}" '
+                     f'target="_self">{esc(label)}</a>')
+    if not chips:
+        return
+    st.markdown(f'<div class="topic-concepts page-sub" '
+                f'style="margin:.1rem 0 .7rem 0">Concepts: {"".join(chips)}</div>',
+                unsafe_allow_html=True)
+
+
+def _prereq_strip(slug: str, f: Path, result: dict):
+    """What to read before this topic, and your corrections to that list.
+
+    The routine proposes `prereqs` in the frontmatter and rewrites the file
+    every night, so a correction made in the file would not survive until
+    morning. Corrections are made here instead and live in the DB: the `x`
+    on a prerequisite records a "remove" (or simply forgets an "add", when
+    that is how it got on the list), a removed frontmatter prerequisite
+    stays visible struck through with a "restore" next to it, and the picker
+    records an "add". `jobscout.concepts` reads the three back as frontmatter
+    minus the removes plus the adds.
+
+    The picker never offers a topic that already needs this one, at any
+    remove - `concepts.would_cycle` walks the effective graph, not the
+    declared one, so a cycle you could only create through your own earlier
+    overrides is refused too.
+
+    Resume drills unlock nothing and need nothing, so they get no strip.
+    """
+    try:
+        meta, _ = graph.split_frontmatter(f.read_text())
+    except OSError:
+        return
+    if graph.track_of(slug, meta) == "resume":
+        return
+
+    topics = result["topics"]
+    effective = list(result["prereqs"].get(slug, ()))
+    mine = result["overrides"].get(slug, {})
+    removed = [p for p in (topics.get(slug) or {}).get("prereqs", ())
+               if mine.get(p) == "remove" and p in topics]
+
+    def title_of(p):
+        return (topics.get(p) or {}).get("title", p)
+
+    def write(action, prereq):
+        """Every write opens its own connection: a button's rerun can land on
+        a different thread than the one that opened the module-level one, and
+        sqlite objects are bound to their thread (same reason as on_action)."""
+        c = get_conn()
+        try:
+            if action == "clear":
+                db.clear_override(c, slug, prereq)
+            else:
+                db.add_override(c, slug, prereq, action)
+        except (sqlite3.Error, ValueError):
+            pass
+        finally:
+            c.close()
+
+    rows = [(p, False) for p in effective] + [(p, True) for p in removed]
+    if rows:
+        cols = st.columns([1.5] + [2.2, 0.8] * len(rows),
+                          vertical_alignment="center")
+        cols[0].markdown('<div class="topic-prereqs page-sub" '
+                         'style="margin:0">Prerequisites:</div>',
+                         unsafe_allow_html=True)
+        for i, (prereq, gone) in enumerate(rows):
+            link, act = cols[1 + 2 * i], cols[2 + 2 * i]
+            style = ' style="text-decoration:line-through; opacity:.55"' if gone else ""
+            cls = "prereq-gone" if gone else "prereq-live"
+            link.markdown(f'<a class="{cls}"{style} href="study?topic={prereq}" '
+                          f'target="_self">📖 {esc(title_of(prereq))}</a>',
+                          unsafe_allow_html=True)
+            if gone:
+                if act.button("restore", key=f"prq_re_{slug}_{prereq}",
+                              help=f"Put '{title_of(prereq)}' back; the "
+                                   f"frontmatter has the last word again"):
+                    write("clear", prereq)
+                    st.rerun()
+            elif act.button("✕", key=f"prq_rm_{slug}_{prereq}",
+                            help=f"This topic does not need "
+                                 f"'{title_of(prereq)}' first"):
+                # an "add" of your own is forgotten rather than contradicted:
+                # a "remove" over it would outlive the frontmatter it was
+                # never in and quietly block the routine from proposing it
+                write("clear" if mine.get(prereq) == "add" else "remove", prereq)
+                st.rerun()
+    else:
+        st.caption("Prerequisites: none declared")
+
+    taken = set(effective) | {slug}
+    options = [p for p in sorted(topics)
+               if p not in taken
+               and topics[p].get("track") != "resume"
+               and not concepts.would_cycle(result, slug, p)]
+    pick, add = st.columns([3, 1], vertical_alignment="bottom")
+    chosen = pick.selectbox(
+        "add a prerequisite", options, index=None, key=f"prq_add_{slug}",
+        format_func=title_of, placeholder="choose a topic",
+        help="Only topics that do not already need this one: a prerequisite "
+             "loop would leave the study order unreadable.")
+    if add.button("Add", key=f"prq_add_btn_{slug}", disabled=not chosen):
+        write("add", chosen)
+        st.rerun()
+
+
 def _diagram(slug: str):
     """The topic's overview illustration, above the deck: one picture of the
     mental model before any words.
@@ -524,6 +659,13 @@ def topic_article() -> bool:
         st.markdown(f'<div class="topic-related page-sub" '
                     f'style="margin:.1rem 0 .7rem 0">Related: {links}</div>',
                     unsafe_allow_html=True)
+
+    # ── the concept layer: what this topic teaches, and what comes first ──
+    # One build for both strips, and the only place this page walks the
+    # concept graph (WS-B1's cached `_concept_graph()` swaps in here).
+    cresult = concepts.build(study_dir(), conn)
+    _concept_chips(slug, cresult)
+    _prereq_strip(slug, f, cresult)
 
     _diagram(slug)
     _flashcards(slug)

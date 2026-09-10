@@ -236,6 +236,75 @@ def test_publish_toggle(page, server):
     conn.close()
 
 
+def test_topic_page_concepts_and_prereqs(page, server):
+    """The concept strip and the prerequisite strip, under Related.
+
+    Chips are the topic's own `concepts` frontmatter, one per name. The
+    prerequisite strip is the frontmatter list after your corrections, and
+    the corrections are the point: the `x` writes a "remove" row that the
+    nightly rewrite of the topic file cannot undo, the prerequisite stays on
+    the page struck through so you can see what you turned off, and
+    "restore" deletes the row again.
+
+    The picker is asserted empty on alpha's page, which is the cycle guard
+    doing its job rather than an accident of the fixture: beta already needs
+    alpha, so offering beta would close a loop, and the two-topic fixture has
+    nothing else to offer.
+
+    The override table is left empty for the suites that follow.
+    """
+    goto_page(page, server, "/study?topic=demo-alpha-topic")
+    page.wait_for_selector("div.topic-concepts", timeout=30000)
+    chips = page.locator("div.topic-concepts a.chip")
+    assert chips.count() == 2
+    assert [chips.nth(i).inner_text() for i in range(2)] == \
+        ["alpha concept", "shared concept"]
+    assert chips.first.get_attribute("href") == "concepts?c=c%3Aalpha%20concept"
+
+    # alpha declares no prerequisites, and the picker has nothing to offer:
+    # beta needs alpha, so it would close a loop
+    assert page.locator("text=Prerequisites: none declared").count() == 1
+    picker = page.locator("div[data-testid='stSelectbox']",
+                          has_text="add a prerequisite").first
+    picker.locator("input").click()
+    page.wait_for_timeout(600)
+    assert page.locator("li[role='option']").count() == 0
+    page.keyboard.press("Escape")
+
+    # beta needs alpha, and the strip links at it
+    goto_page(page, server, "/study?topic=demo-beta-topic")
+    page.wait_for_selector("div.topic-prereqs", timeout=30000)
+    assert page.locator("div.topic-prereqs").first.inner_text() == "Prerequisites:"
+    assert page.locator("a.prereq-live[href='study?topic=demo-alpha-topic']"
+                        ).count() == 1
+
+    conn = db_conn(server)
+    try:
+        page.locator(
+            ".st-key-prq_rm_demo-beta-topic_demo-alpha-topic button").first.click()
+        page.wait_for_selector("a.prereq-gone", timeout=30000)
+        row = conn.execute(
+            "SELECT slug, prereq, action FROM study_prereq_overrides").fetchone()
+        assert row is not None
+        assert (row["slug"], row["prereq"], row["action"]) == \
+            ("demo-beta-topic", "demo-alpha-topic", "remove")
+        gone = page.locator("a.prereq-gone[href='study?topic=demo-alpha-topic']")
+        assert gone.count() == 1
+        assert "line-through" in (gone.get_attribute("style") or "")
+
+        page.locator(
+            ".st-key-prq_re_demo-beta-topic_demo-alpha-topic button").first.click()
+        page.wait_for_selector("a.prereq-live[href='study?topic=demo-alpha-topic']",
+                               timeout=30000)
+        assert page.locator("a.prereq-gone").count() == 0
+        assert conn.execute(
+            "SELECT COUNT(*) c FROM study_prereq_overrides").fetchone()["c"] == 0
+    finally:
+        conn.execute("DELETE FROM study_prereq_overrides")
+        conn.commit()
+        conn.close()
+
+
 def test_topic_page_highlight_note_and_studied(page, server):
     """Selecting text in the article offers Highlight; the highlight persists
     to study_notes, re-renders as a <mark>, takes a note, and the page's
