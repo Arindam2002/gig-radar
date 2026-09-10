@@ -361,7 +361,12 @@ def _concept_graph():
                                  for f in topics.glob("*.md")))
     except OSError:
         signature = ()
-    return _concept_graph_for(signature)
+    # prerequisite overrides live in the DB, not the folder, and change the
+    # effective graph the moment one is written: they are part of the key
+    overrides = tuple(sorted((slug, prereq, action)
+                             for slug, m in db.overrides_map(conn).items()
+                             for prereq, action in m.items()))
+    return _concept_graph_for((signature, overrides))
 
 
 def _back_to_study():
